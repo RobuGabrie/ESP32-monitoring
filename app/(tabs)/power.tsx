@@ -5,12 +5,13 @@ import { BatteryBar } from '@/components/BatteryBar';
 import { FullChart } from '@/components/FullChart';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TabHero } from '@/components/TabHero';
+import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { BATTERY_CAPACITY } from '@/constants/config';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
 
 export default function PowerScreen() {
-  const { data, history, totalCurrentMah, peakCurrent, status } = useESP32();
+  const { data, history, totalCurrentMah, peakCurrent, status, selectedRange, setTimeRange } = useESP32();
 
   const avgCurrent = history.currentHistory.length
     ? history.currentHistory.reduce((acc, n) => acc + n, 0) / history.currentHistory.length
@@ -38,8 +39,9 @@ export default function PowerScreen() {
         />
 
         <SectionHeader title="Power Trends" count={2} />
-        <FullChart title="Supply Voltage" data={history.voltHistory.slice(-40)} color="#0F766E" label={(v) => `${v.toFixed(2)}V`} />
-        <FullChart title="Current Draw" data={history.currentHistory.slice(-40)} color="#DC2626" label={(v) => `${Math.round(v)}mA`} />
+        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
+        <FullChart title="Supply Voltage" data={history.voltHistory} xValues={history.timeline} color="#0F766E" label={(v) => `${v.toFixed(2)}V`} />
+        <FullChart title="Current Draw" data={history.currentHistory} xValues={history.timeline} color="#DC2626" label={(v) => `${Math.round(v)}mA`} />
 
         <SectionHeader title="Battery Insights" count={6} />
         <View style={styles.statsCard}>

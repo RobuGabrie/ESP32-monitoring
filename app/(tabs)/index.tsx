@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
 import { SectionHeader } from '@/components/SectionHeader';
+import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
 import { ModuleName } from '@/hooks/useStore';
@@ -26,7 +27,7 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 };
 
 export default function OverviewScreen() {
-  const { data, history, status, ioLog, moduleStates, sendModuleCommand } = useESP32();
+  const { data, history, status, ioLog, moduleStates, sendModuleCommand, selectedRange, setTimeRange } = useESP32();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [selectedCard, setSelectedCard] = useState<DashboardCard | null>(null);
 
@@ -225,6 +226,8 @@ export default function OverviewScreen() {
           ))}
         </View>
 
+        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
+
         <SectionHeader title="Environment Sensors" count={environmentCards.length} onActionPress={onExportPress} actionLabel="Export JSON" />
         <View style={styles.cardRow}>
           {environmentCards.map((item) => (
@@ -281,6 +284,7 @@ export default function OverviewScreen() {
                 <FullChart
                   title="Ultimele valori"
                   data={selectedSeries}
+                  xValues={history.timeline.slice(-90)}
                   color={selectedCard.color}
                   label={selectedCard.detailLabel}
                   height={290}

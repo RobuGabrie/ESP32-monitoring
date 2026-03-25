@@ -3,9 +3,14 @@ export const MQTT_PORT = 1883;
 export const MQTT_WS_PROTOCOL = 'wss';
 export const MQTT_WS_PORT = 8084;
 export const MQTT_TOPIC = 'hardandsoft/esp32/data';
+export const MQTT_RAW_TOPIC = 'hardandsoft/esp32/gpio_raw';
 export const MQTT_CMD_TOPIC = 'hardandsoft/esp32/cmd';
 export const MQTT_STATE_TOPIC = 'hardandsoft/esp32/state';
 export const MQTT_USER = 'emqx';
 export const MQTT_PASS = 'public';
 export const BATTERY_CAPACITY = 2000;
 export const USE_MOCK = false;
+
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://imdevwnnqmrnmxlwqxzn.supabase.co';
+export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+export const HISTORY_LIMIT = 240;

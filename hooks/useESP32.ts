@@ -1,21 +1,26 @@
 import { format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import axios from 'axios';
 import mqtt, { MqttClient } from 'mqtt';
 import { Buffer } from 'buffer';
 import process from 'process';
 
 import {
+  HISTORY_LIMIT,
   MQTT_BROKER,
   MQTT_CMD_TOPIC,
   MQTT_PASS,
+  MQTT_RAW_TOPIC,
   MQTT_STATE_TOPIC,
   MQTT_TOPIC,
   MQTT_USER,
   MQTT_WS_PROTOCOL,
   MQTT_WS_PORT,
+  SUPABASE_ANON_KEY,
+  SUPABASE_URL,
   USE_MOCK
 } from '@/constants/config';
-import { ESP32Data, ModuleName, getStoreState, useStore } from '@/hooks/useStore';
+import { ESP32Data, IOLogEntry, ModuleName, TimeRangeKey, getStoreState, useStore } from '@/hooks/useStore';
 
 if (!globalThis.Buffer) {
   (globalThis as typeof globalThis & { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -46,6 +51,43 @@ const toBinary = (value: unknown): 0 | 1 => (toNumber(value, 0) > 0 ? 1 : 0);
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const toEpochMs = (value: unknown, fallback = Date.now()) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const s = value.trim();
+    const direct = Date.parse(s);
+    if (Number.isFinite(direct)) {
+      return direct;
+    }
+
+    // Common ESP format: YYYY-MM-DD HH:mm:ss
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})$/);
+    if (m) {
+      const parsed = new Date(
+        Number(m[1]),
+        Number(m[2]) - 1,
+        Number(m[3]),
+        Number(m[4]),
+        Number(m[5]),
+        Number(m[6])
+      ).getTime();
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    const parsed = Date.parse(s.replace(' ', 'T'));
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+};
+
 // LDR on this board is inverted: lower ADC means brighter, higher ADC means darker.
 const toPercentFrom255 = (value: number) => ((255 - clamp(value, 0, 255)) / 255) * 100;
 
@@ -60,6 +102,32 @@ const normalizeGpioRecord = (payload: Record<string, unknown>) => {
   });
 
   return out;
+};
+
+const normalizeRawRecord = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') {
+    return {} as Record<string, number>;
+  }
+  return normalizeGpioRecord(payload as Record<string, unknown>);
+};
+
+const normalizeRawIoPayload = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const rec = payload as Record<string, unknown>;
+  const gpio = normalizeRawRecord(rec.gpio);
+  const pcf8591Raw = normalizeRawRecord(rec.pcf8591_raw);
+  const ina219Raw = normalizeRawRecord(rec.ina219_raw);
+
+  if (!Object.keys(gpio).length && !Object.keys(pcf8591Raw).length && !Object.keys(ina219Raw).length) {
+    return null;
+  }
+
+  const ts = extractTimestamp(rec) ?? format(new Date(), 'HH:mm:ss.SSS');
+  const timeMs = toEpochMs(rec.created_at ?? ts, Date.now());
+  return { ts, timeMs, gpio, pcf8591Raw, ina219Raw };
 };
 
 const normalizePayload = (payload: unknown): ESP32Data | null => {
@@ -83,16 +151,8 @@ const normalizePayload = (payload: unknown): ESP32Data | null => {
   });
 
   if (!Object.keys(normalizedGpio).length) {
-    normalizedGpio.gpio2 = toBinary(rec.gpio2);
-    normalizedGpio.gpio3 = toBinary(rec.gpio3);
-    normalizedGpio.gpio4 = toBinary(rec.gpio4);
-    normalizedGpio.gpio5 = toBinary(rec.gpio5);
-    normalizedGpio.gpio12 = toBinary(rec.gpio12);
-    normalizedGpio.gpio13 = toBinary(rec.gpio13);
-    normalizedGpio.gpio14 = toBinary(rec.gpio14);
-    normalizedGpio.gpio15 = toBinary(rec.gpio15);
-    normalizedGpio.adc0 = Math.round(toNumber(rec.adc0, 0));
-    normalizedGpio.adc1 = Math.round(toNumber(rec.adc1, 0));
+    // Keep GPIO empty when payload does not provide real I/O fields.
+    // Raw GPIO data is consumed from the dedicated MQTT raw topic.
   }
 
   const rawReading = toNumber(rec.light_raw ?? rec.ldr, Number.NaN);
@@ -115,6 +175,7 @@ const normalizePayload = (payload: unknown): ESP32Data | null => {
 
   return {
     timestamp: typeof rec.timestamp === 'string' ? rec.timestamp : typeof rec.ts === 'string' ? rec.ts : '',
+    recordedAtMs: toEpochMs(rec.created_at ?? rec.timestamp ?? rec.ts, Date.now()),
     uptime: Math.round(toNumber(rec.uptime ?? rec.up, 0)),
     temp: toNumber(rec.temp ?? rec.temperature, 0),
     light: lightPercent,
@@ -184,6 +245,7 @@ const mockData = (t: number): ESP32Data => {
 
   return {
   timestamp: '',
+    recordedAtMs: Date.now(),
   uptime: t,
   temp: 22 + 4 * Math.sin(t / 30) + random(0.5),
   lightRaw,
@@ -229,13 +291,123 @@ let sharedStaleTimer: ReturnType<typeof setInterval> | null = null;
 let sharedMockTimer: ReturnType<typeof setInterval> | null = null;
 let sharedEndpointIndex = 0;
 let sharedLastMessageAt = 0;
+let sharedLastRawTs = '';
+let sharedLastRawAtMs = 0;
 let sharedTick = 0;
 let sharedInitialized = false;
+let sharedHistoryLoaded = false;
+
+interface SupabaseReadingRow {
+  created_at: string;
+  device_ts: string;
+  uptime_s: number;
+  temp_c: number | null;
+  ldr_raw: number | null;
+  ldr_pct: number | null;
+  rssi_dbm: number | null;
+  cpu_pct: number | null;
+  voltage_v: number | null;
+  current_ma: number | null;
+  power_mw: number | null;
+  used_mah: number | null;
+  battery_pct: number | null;
+  battery_min: number | null;
+}
+
+const buildHistoryEntry = (row: SupabaseReadingRow): ESP32Data => {
+  const lightPercent = toNumber(row.ldr_pct, 0);
+  const lightRaw = toNumber(row.ldr_raw, Math.round(((100 - clamp(lightPercent, 0, 100)) / 100) * 255));
+
+  return {
+    timestamp: row.device_ts || row.created_at,
+    recordedAtMs: toEpochMs(row.created_at, Date.now()),
+    uptime: Math.max(0, Math.round(toNumber(row.uptime_s, 0))),
+    temp: toNumber(row.temp_c, 0),
+    light: clamp(lightPercent, 0, 100),
+    lightRaw: Math.round(clamp(lightRaw, 0, 255)),
+    lightPercent: clamp(lightPercent, 0, 100),
+    cpu: toNumber(row.cpu_pct, 0),
+    volt: toNumber(row.voltage_v, 0),
+    current: toNumber(row.current_ma, 0),
+    powerMw: toNumber(row.power_mw, 0),
+    totalMah: toNumber(row.used_mah, 0),
+    batteryPercent: toNumber(row.battery_pct, 0),
+    batteryLifeMin: toNumber(row.battery_min, 0),
+    rssi: toNumber(row.rssi_dbm, -99),
+    gpio: {},
+    ssid: '--',
+    ip: '--',
+    mac: '--',
+    channel: 0
+  };
+};
+
+const buildHistoryLog = (row: SupabaseReadingRow): IOLogEntry => {
+  const created = row.created_at ? new Date(row.created_at) : new Date();
+  const ts = format(created, 'HH:mm:ss');
+
+  const rawText = [
+    `DB ts=${row.device_ts || '--'} up=${Math.round(toNumber(row.uptime_s, 0))}s`,
+    `temp_c=${toNumber(row.temp_c, 0).toFixed(2)} ldr_raw=${Math.round(toNumber(row.ldr_raw, 0))} ldr_pct=${toNumber(row.ldr_pct, 0).toFixed(2)}`,
+    `rssi_dbm=${Math.round(toNumber(row.rssi_dbm, -99))} cpu_pct=${toNumber(row.cpu_pct, 0).toFixed(2)}`,
+    `voltage_v=${toNumber(row.voltage_v, 0).toFixed(3)} current_ma=${toNumber(row.current_ma, 0).toFixed(2)} power_mw=${toNumber(row.power_mw, 0).toFixed(2)}`,
+    `used_mah=${toNumber(row.used_mah, 0).toFixed(2)} battery_pct=${toNumber(row.battery_pct, 0).toFixed(1)} battery_min=${Math.round(toNumber(row.battery_min, 0))}`
+  ].join(' | ');
+
+  return {
+    ts,
+    timeMs: created.getTime(),
+    temp: toNumber(row.temp_c, 0),
+    light: toNumber(row.ldr_pct, 0),
+    gpio: {},
+    source: 'history',
+    rawText
+  };
+};
+
+const loadSupabaseHistory = async () => {
+  if (sharedHistoryLoaded || USE_MOCK) {
+    return;
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return;
+  }
+
+  try {
+    const response = await axios.get<SupabaseReadingRow[]>(`${SUPABASE_URL}/rest/v1/sensor_readings`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+      },
+      params: {
+        select:
+          'created_at,device_ts,uptime_s,temp_c,ldr_raw,ldr_pct,rssi_dbm,cpu_pct,voltage_v,current_ma,power_mw,used_mah,battery_pct,battery_min',
+        order: 'created_at.desc',
+        limit: HISTORY_LIMIT
+      }
+    });
+
+    const rows = (response.data ?? []).slice().reverse();
+    if (!rows.length) {
+      sharedHistoryLoaded = true;
+      return;
+    }
+
+    const readings = rows.map(buildHistoryEntry);
+    const logs = rows.map(buildHistoryLog);
+    getStoreState().hydrateHistory(readings, logs);
+    sharedHistoryLoaded = true;
+  } catch {
+    // Keep live stream functional even when history API fails.
+  }
+};
 
 const buildZeroReadingFromStore = (): ESP32Data => {
   const previous = getStoreState().data;
   return {
     timestamp: previous?.timestamp ?? '',
+    recordedAtMs: previous?.recordedAtMs ?? Date.now(),
     uptime: previous?.uptime ?? 0,
     temp: 0,
     light: 0,
@@ -347,7 +519,7 @@ const connectSharedMQTT = () => {
     sharedLastMessageAt = Date.now();
     clearSharedReconnect();
     getStoreState().setConnectionStatus('online');
-    client.subscribe([MQTT_TOPIC, MQTT_STATE_TOPIC], (err) => {
+    client.subscribe([MQTT_TOPIC, MQTT_RAW_TOPIC, MQTT_STATE_TOPIC], (err) => {
       if (err) {
         handleDisconnect(true);
       }
@@ -366,6 +538,34 @@ const connectSharedMQTT = () => {
         return;
       }
 
+      if (topic === MQTT_RAW_TOPIC) {
+        const raw = normalizeRawIoPayload(parsed);
+        if (!raw) {
+          return;
+        }
+
+        if (raw.ts === sharedLastRawTs) {
+          return;
+        }
+        sharedLastRawTs = raw.ts;
+        sharedLastRawAtMs = Date.now();
+
+        sharedLastMessageAt = Date.now();
+        getStoreState().setConnectionStatus('online');
+        const snapshot = getStoreState().data;
+        getStoreState().addLog({
+          ts: raw.ts,
+          timeMs: raw.timeMs,
+          temp: snapshot?.temp ?? 0,
+          light: snapshot?.lightPercent ?? snapshot?.light ?? 0,
+          gpio: raw.gpio,
+          pcf8591Raw: raw.pcf8591Raw,
+          ina219Raw: raw.ina219Raw,
+          source: 'live'
+        });
+        return;
+      }
+
       const now = new Date();
       const reading = normalizePayload(parsed);
       if (!reading) {
@@ -376,6 +576,23 @@ const connectSharedMQTT = () => {
       getStoreState().setConnectionStatus('online');
       const ts = extractTimestamp(parsed) ?? format(now, 'HH:mm:ss.SSS');
       getStoreState().pushReading(reading, ts);
+
+      // Fallback: if raw topic is missing/delayed, keep serial monitor alive with MQTT data topic lines.
+      if (Date.now() - sharedLastRawAtMs > 3000) {
+        getStoreState().addLog({
+          ts: format(now, 'HH:mm:ss'),
+          timeMs: reading.recordedAtMs ?? Date.now(),
+          temp: reading.temp,
+          light: reading.light,
+          gpio: reading.gpio,
+          source: 'live',
+          rawText: [
+            `MQTT data ts=${reading.timestamp || '--'} up=${Math.round(reading.uptime)}s`,
+            `temp=${reading.temp.toFixed(2)}C ldr_raw=${Math.round(reading.lightRaw)} ldr_pct=${reading.lightPercent.toFixed(2)}`,
+            `rssi=${Math.round(reading.rssi)} cpu=${reading.cpu.toFixed(2)} v=${reading.volt.toFixed(3)} i=${reading.current.toFixed(2)} mA`
+          ].join(' | ')
+        });
+      }
     } catch {
       // Ignore malformed payloads and keep the stream alive.
     }
@@ -412,6 +629,7 @@ const ensureSharedConnection = () => {
     return;
   }
 
+  void loadSupabaseHistory();
   connectSharedMQTT();
 
   sharedStaleTimer = setInterval(() => {
@@ -441,7 +659,10 @@ export const useESP32 = () => {
   const currentHistory = useStore((s) => s.currentHistory);
   const voltHistory = useStore((s) => s.voltHistory);
   const rssiHistory = useStore((s) => s.rssiHistory);
+  const historyTimeline = useStore((s) => s.historyTimeline);
   const status = useStore((s) => s.connectionStatus);
+  const selectedRange = useStore((s) => s.selectedRange);
+  const setTimeRange = useStore((s) => s.setTimeRange);
   const ioLog = useStore((s) => s.ioLog);
   const totalCurrentMah = useStore((s) => s.totalCurrentMah);
   const peakCurrent = useStore((s) => s.peakCurrent);
@@ -462,17 +683,45 @@ export const useESP32 = () => {
     return true;
   }, []);
 
+  const rangeMsMap: Record<Exclude<TimeRangeKey, 'all'>, number> = {
+    '15m': 15 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+    '6h': 6 * 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000
+  };
+
+  const historyStartIndex = useMemo(() => {
+    if (selectedRange === 'all') {
+      return 0;
+    }
+
+    const cutoff = Date.now() - rangeMsMap[selectedRange];
+    const idx = historyTimeline.findIndex((ms) => ms >= cutoff);
+    return idx >= 0 ? idx : historyTimeline.length;
+  }, [historyTimeline, selectedRange]);
+
   const history = useMemo(
     () => ({
-      tempHistory,
-      lightHistory,
-      cpuHistory,
-      currentHistory,
-      voltHistory,
-      rssiHistory
+      tempHistory: tempHistory.slice(historyStartIndex),
+      lightHistory: lightHistory.slice(historyStartIndex),
+      cpuHistory: cpuHistory.slice(historyStartIndex),
+      currentHistory: currentHistory.slice(historyStartIndex),
+      voltHistory: voltHistory.slice(historyStartIndex),
+      rssiHistory: rssiHistory.slice(historyStartIndex),
+      timeline: historyTimeline.slice(historyStartIndex)
     }),
-    [tempHistory, lightHistory, cpuHistory, currentHistory, voltHistory, rssiHistory]
+    [tempHistory, lightHistory, cpuHistory, currentHistory, voltHistory, rssiHistory, historyTimeline, historyStartIndex]
   );
+
+  const filteredLog = useMemo(() => {
+    if (selectedRange === 'all') {
+      return ioLog;
+    }
+
+    const cutoff = Date.now() - rangeMsMap[selectedRange];
+    return ioLog.filter((entry) => (entry.timeMs ?? Date.now()) >= cutoff);
+  }, [ioLog, selectedRange]);
 
   const sendModuleCommand = useCallback(
     (module: ModuleName, enabled: boolean) => {
@@ -489,7 +738,9 @@ export const useESP32 = () => {
     data,
     history,
     status,
-    ioLog,
+    ioLog: filteredLog,
+    selectedRange,
+    setTimeRange,
     totalCurrentMah,
     peakCurrent,
     moduleStates,

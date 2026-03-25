@@ -10,3 +10,6 @@ yarn-error.log*
 *.tsbuildinfo
 android/
 ios/
+.env
+.env.*
+!.env.example

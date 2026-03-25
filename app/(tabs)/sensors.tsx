@@ -5,18 +5,19 @@ import { FullChart } from '@/components/FullChart';
 import { LogArea } from '@/components/LogArea';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TabHero } from '@/components/TabHero';
+import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
 
 export default function SensorsScreen() {
-  const { history, ioLog, data, status } = useESP32();
+  const { history, ioLog, data, status, selectedRange, setTimeRange } = useESP32();
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <TabHero
           title="Sensors"
-          subtitle="Real-time environmental telemetry and activity stream."
+          subtitle="Real-time telemetry plus 1Hz raw serial stream for GPIO/I2C I/O."
           statusLabel={status === 'offline' ? 'Offline' : 'Online'}
           statusTone={status === 'offline' ? 'offline' : 'online'}
           meta={[
@@ -26,10 +27,11 @@ export default function SensorsScreen() {
         />
 
         <SectionHeader title="Sensor Trends" count={2} />
-        <FullChart title="Temperature" data={history.tempHistory.slice(-40)} color="#2563EB" label={(v) => `${v.toFixed(1)}°`} />
-        <FullChart title="Light Intensity" data={history.lightHistory.slice(-40)} color="#F59E0B" label={(v) => `${Math.round(v)}%`} />
+        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
+        <FullChart title="Temperature" data={history.tempHistory} xValues={history.timeline} color="#2563EB" label={(v) => `${v.toFixed(1)}°`} />
+        <FullChart title="Light Intensity" data={history.lightHistory} xValues={history.timeline} color="#F59E0B" label={(v) => `${Math.round(v)}%`} />
 
-        <SectionHeader title="I/O Activity" count={Math.min(ioLog.length, 60)} />
+        <SectionHeader title="I/O Activity (Serial)" count={Math.min(ioLog.length, 60)} />
         <LogArea entries={ioLog.slice(-60)} />
       </ScrollView>
     </SafeAreaView>

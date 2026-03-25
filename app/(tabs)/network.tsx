@@ -6,11 +6,12 @@ import { NetworkTable } from '@/components/NetworkTable';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SignalBars } from '@/components/SignalBars';
 import { TabHero } from '@/components/TabHero';
+import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
 
 export default function NetworkScreen() {
-  const { data, history, status } = useESP32();
+  const { data, history, status, selectedRange, setTimeRange } = useESP32();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -44,7 +45,8 @@ export default function NetworkScreen() {
         />
 
         <SectionHeader title="RSSI Trend" count={1} />
-        <FullChart title="RSSI History" data={history.rssiHistory.slice(-40)} color="#10B981" label={(v) => `${Math.round(v)} dBm`} />
+        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
+        <FullChart title="RSSI History" data={history.rssiHistory} xValues={history.timeline} color="#10B981" label={(v) => `${Math.round(v)} dBm`} />
       </ScrollView>
     </SafeAreaView>
   );

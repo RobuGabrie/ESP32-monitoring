@@ -49,12 +49,18 @@ const buildSmoothPath = (points: Array<{ x: number; y: number }>) => {
 
 export function Sparkline({ data, color, width, height }: Props) {
   const { linePath, areaPath, lastPoint } = useMemo(() => {
-    const base = data.length ? data : [0, 0];
+    const finite = data.filter((v) => Number.isFinite(v));
+    const base = finite.length ? finite : [0, 0];
     const values = smoothSeries(base);
 
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min || 1;
+    let min = Math.min(...values, 0);
+    let max = Math.max(...values, 0);
+    if (min === max) {
+      const pad = Math.max(Math.abs(max) * 0.1, 1);
+      min -= pad;
+      max += pad;
+    }
+    const range = max - min;
 
     const points = values.map((value, i) => {
       const x = (i / Math.max(values.length - 1, 1)) * width;
