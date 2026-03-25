@@ -86,9 +86,25 @@ export function FullChart({
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const values = useMemo(() => {
-    const finite = data.filter((v) => Number.isFinite(v));
-    const base = finite.length ? finite : [0, 0];
-    return smoothSeries(base);
+    if (!data.length) {
+      return [0, 0];
+    }
+
+    // Preserve index alignment with xValues by replacing invalid samples,
+    // not removing them from the series.
+    const sanitized: number[] = [];
+    for (let i = 0; i < data.length; i += 1) {
+      const v = data[i];
+      if (Number.isFinite(v)) {
+        sanitized.push(v);
+      } else if (sanitized.length) {
+        sanitized.push(sanitized[sanitized.length - 1]);
+      } else {
+        sanitized.push(0);
+      }
+    }
+
+    return smoothSeries(sanitized);
   }, [data]);
 
   const safeTickCount = Math.max(4, yTickCount);
@@ -177,17 +193,33 @@ export function FullChart({
       ? xValues
       : Array.from({ length: values.length }, (_, i) => i);
 
-    const last = timeline.length - 1;
-    const mid = Math.floor(last / 2);
-    const idxs = [...new Set([0, mid, last])].filter((idx) => idx >= 0);
+    const realTimes = timeline.filter((v): v is number => Number.isFinite(v) && v > 1_000_000_000_000);
+    const tMin = realTimes.length ? Math.min(...realTimes) : NaN;
+    const tMax = realTimes.length ? Math.max(...realTimes) : NaN;
+    const hasRealRange = Number.isFinite(tMin) && Number.isFinite(tMax) && tMax >= tMin;
 
+    const spanMs = hasRealRange ? Math.abs((tMax as number) - (tMin as number)) : 0;
     const formatX = (v: number) => {
       if (v > 1_000_000_000_000) {
-        return formatDate(v, 'HH:mm');
+        return spanMs > 24 * 60 * 60 * 1000 ? formatDate(v, 'dd/MM HH:mm') : formatDate(v, 'HH:mm');
       }
       return String(v);
     };
 
+    if (hasRealRange) {
+      const start = tMin as number;
+      const end = tMax as number;
+      const mid = start + (end - start) / 2;
+      return [
+        { idx: 0, x: leftPad, label: formatX(start) },
+        { idx: 1, x: leftPad + innerW / 2, label: formatX(mid) },
+        { idx: 2, x: leftPad + innerW, label: formatX(end) }
+      ];
+    }
+
+    const last = timeline.length - 1;
+    const mid = Math.floor(last / 2);
+    const idxs = [...new Set([0, mid, last])].filter((idx) => idx >= 0);
     return idxs.map((idx) => {
       const x = leftPad + (idx / Math.max(values.length - 1, 1)) * innerW;
       return { idx, x, label: formatX(timeline[idx] ?? idx) };

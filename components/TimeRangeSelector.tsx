@@ -14,13 +14,13 @@ const OPTIONS: Array<{ key: TimeRangeKey; label: string }> = [
   { key: '6h', label: '6h' },
   { key: '24h', label: '24h' },
   { key: '7d', label: '7d' },
-  { key: 'all', label: 'All' }
+  { key: 'all', label: 'Toate' }
 ];
 
 export function TimeRangeSelector({ value, onChange }: Props) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>Time Range</Text>
+      <Text style={styles.label}>Interval de timp</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {OPTIONS.map((option) => {
           const active = option.key === value;

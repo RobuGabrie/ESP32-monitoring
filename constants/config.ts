@@ -13,4 +13,4 @@ export const USE_MOCK = false;
 
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://imdevwnnqmrnmxlwqxzn.supabase.co';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-export const HISTORY_LIMIT = 240;
+export const HISTORY_LIMIT = 5000;

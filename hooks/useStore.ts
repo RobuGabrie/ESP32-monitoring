@@ -46,8 +46,8 @@ export interface IOLogEntry {
   rawText?: string;
 }
 
-const cap = (arr: number[], next: number, max = 240) => [...arr, next].slice(-max);
-const capLog = (arr: IOLogEntry[], next: IOLogEntry, max = 200) => [...arr, next].slice(-max);
+const cap = (arr: number[], next: number, max = 5000) => [...arr, next].slice(-max);
+const capLog = (arr: IOLogEntry[], next: IOLogEntry, max = 1500) => [...arr, next].slice(-max);
 
 interface StoreState {
   data: ESP32Data | null;
@@ -161,15 +161,15 @@ const actions = {
       return;
     }
 
-    const tempHistory = readings.map((r) => r.temp).filter((v) => Number.isFinite(v)).slice(-240);
-    const lightHistory = readings.map((r) => r.light).filter((v) => Number.isFinite(v)).slice(-240);
-    const cpuHistory = readings.map((r) => r.cpu).filter((v) => Number.isFinite(v)).slice(-240);
-    const currentHistory = readings.map((r) => r.current).filter((v) => Number.isFinite(v)).slice(-240);
-    const voltHistory = readings.map((r) => r.volt).filter((v) => Number.isFinite(v)).slice(-240);
-    const rssiHistory = readings.map((r) => r.rssi).filter((v) => Number.isFinite(v)).slice(-240);
+    const tempHistory = readings.map((r) => r.temp).filter((v) => Number.isFinite(v)).slice(-5000);
+    const lightHistory = readings.map((r) => r.light).filter((v) => Number.isFinite(v)).slice(-5000);
+    const cpuHistory = readings.map((r) => r.cpu).filter((v) => Number.isFinite(v)).slice(-5000);
+    const currentHistory = readings.map((r) => r.current).filter((v) => Number.isFinite(v)).slice(-5000);
+    const voltHistory = readings.map((r) => r.volt).filter((v) => Number.isFinite(v)).slice(-5000);
+    const rssiHistory = readings.map((r) => r.rssi).filter((v) => Number.isFinite(v)).slice(-5000);
     const historyTimeline = readings
       .map((r) => (Number.isFinite(r.recordedAtMs) ? (r.recordedAtMs as number) : Date.now()))
-      .slice(-240);
+      .slice(-5000);
 
     const currentPeak = currentHistory.length ? Math.max(...currentHistory) : storeData.peakCurrent;
     const lastReading = readings[readings.length - 1] ?? storeData.data;
@@ -185,7 +185,7 @@ const actions = {
       historyTimeline,
       peakCurrent: currentPeak,
       totalCurrentMah: lastReading?.totalMah ?? storeData.totalCurrentMah,
-      ioLog: logs.slice(-200)
+      ioLog: logs.slice(-1500)
     });
   },
   reset: () => {

@@ -23,28 +23,28 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Monitor',
           tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />
         }}
       />
       <Tabs.Screen
         name="sensors"
         options={{
-          title: 'Sensors',
+          title: 'Senzori',
           tabBarIcon: ({ color, size }) => <Ionicons name="thermometer-outline" size={size} color={color} />
         }}
       />
       <Tabs.Screen
         name="power"
         options={{
-          title: 'Power',
+          title: 'Putere',
           tabBarIcon: ({ color, size }) => <Ionicons name="flash-outline" size={size} color={color} />
         }}
       />
       <Tabs.Screen
         name="network"
         options={{
-          title: 'Network',
+          title: 'Rețea',
           tabBarIcon: ({ color, size }) => <Ionicons name="wifi-outline" size={size} color={color} />
         }}
       />

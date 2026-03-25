@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { format } from 'date-fns';
 
 import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
@@ -21,6 +22,37 @@ type DashboardCard = {
   detailLabel: (v: number) => string;
 };
 
+const cardMeta = {
+  temperature: {
+    icon: '🌡️',
+    title: 'Temperatură',
+    source: 'Termistor',
+    color: '#2563EB',
+    detailLabel: (v: number) => `${v.toFixed(1)} °C`
+  },
+  light: {
+    icon: '☀️',
+    title: 'Luminozitate',
+    source: 'LDR',
+    color: '#F59E0B',
+    detailLabel: (v: number) => `${v.toFixed(1)} %`
+  },
+  cpu: {
+    icon: '⚙️',
+    title: 'Încărcare CPU',
+    source: 'ESP32-C3 SuperMini',
+    color: '#10B981',
+    detailLabel: (v: number) => `${v.toFixed(1)} %`
+  },
+  current: {
+    icon: '🔌',
+    title: 'Curent',
+    source: 'INA219',
+    color: '#EF4444',
+    detailLabel: (v: number) => `${v.toFixed(1)} mA`
+  }
+} as const;
+
 const getNiceMax = (value: number, step: number, floor: number) => {
   const scaled = Math.ceil(Math.max(value, floor) / step) * step;
   return Number.isFinite(scaled) ? scaled : floor;
@@ -29,7 +61,7 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 export default function OverviewScreen() {
   const { data, history, status, ioLog, moduleStates, sendModuleCommand, selectedRange, setTimeRange } = useESP32();
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const [selectedCard, setSelectedCard] = useState<DashboardCard | null>(null);
+  const [selectedCmd, setSelectedCmd] = useState<ModuleName | null>(null);
 
   useEffect(() => {
     if (status !== 'offline') {
@@ -79,55 +111,55 @@ export default function OverviewScreen() {
       };
 
       await Share.share({
-        title: 'ESP32 Telemetry Export',
+        title: 'Export telemetrie ESP32',
         message: JSON.stringify(snapshot, null, 2)
       });
     } catch {
-      Alert.alert('Export failed', 'Could not share telemetry snapshot. Please try again.');
+      Alert.alert('Export eșuat', 'Nu s-a putut exporta snapshot-ul de telemetrie. Încearcă din nou.');
     }
   }, [data, history, ioLog, moduleStates, status]);
 
   const cards = useMemo<DashboardCard[]>(
     () => [
       {
-        icon: '🌡️',
-        title: 'Temperature',
+        icon: cardMeta.temperature.icon,
+        title: cardMeta.temperature.title,
         cmd: 'temperature' as ModuleName,
-        source: 'DHT22',
+        source: cardMeta.temperature.source,
         value: `${(data?.temp ?? 0).toFixed(1)} °C`,
-        color: '#2563EB',
+        color: cardMeta.temperature.color,
         history: history.tempHistory,
-        detailLabel: (v) => `${v.toFixed(1)} °C`
+        detailLabel: cardMeta.temperature.detailLabel
       },
       {
-        icon: '☀️',
-        title: 'Light',
+        icon: cardMeta.light.icon,
+        title: cardMeta.light.title,
         cmd: 'light' as ModuleName,
-        source: 'LDR',
-        value: `${lightPercent}% (${lightRaw}/255)`,
-        color: '#F59E0B',
+        source: cardMeta.light.source,
+        value: `${lightPercent.toFixed(1)} %`,
+        color: cardMeta.light.color,
         history: history.lightHistory,
-        detailLabel: (v) => `${Math.round(v)} %`
+        detailLabel: cardMeta.light.detailLabel
       },
       {
-        icon: '⚙️',
-        title: 'CPU Load',
+        icon: cardMeta.cpu.icon,
+        title: cardMeta.cpu.title,
         cmd: 'cpu' as ModuleName,
-        source: 'ESP32-C3',
-        value: `${Math.round(data?.cpu ?? 0)} %`,
-        color: '#10B981',
+        source: cardMeta.cpu.source,
+        value: `${(data?.cpu ?? 0).toFixed(1)} %`,
+        color: cardMeta.cpu.color,
         history: history.cpuHistory,
-        detailLabel: (v) => `${Math.round(v)} %`
+        detailLabel: cardMeta.cpu.detailLabel
       },
       {
-        icon: '🔌',
-        title: 'Current',
+        icon: cardMeta.current.icon,
+        title: cardMeta.current.title,
         cmd: 'current' as ModuleName,
-        source: 'INA219',
-        value: `${Math.round(data?.current ?? 0)} mA`,
-        color: '#EF4444',
+        source: cardMeta.current.source,
+        value: `${(data?.current ?? 0).toFixed(1)} mA`,
+        color: cardMeta.current.color,
         history: history.currentHistory,
-        detailLabel: (v) => `${Math.round(v)} mA`
+        detailLabel: cardMeta.current.detailLabel
       }
     ],
     [data, history, lightPercent, lightRaw]
@@ -136,19 +168,24 @@ export default function OverviewScreen() {
   const environmentCards = cards.slice(0, 2);
   const systemCards = cards.slice(2, 4);
 
-  const lastUpdated = data?.timestamp && data.timestamp.trim().length ? data.timestamp : '--';
+  const lastUpdated = data?.recordedAtMs
+    ? format(data.recordedAtMs, 'dd.MM.yyyy HH:mm:ss')
+    : data?.timestamp && data.timestamp.trim().length
+      ? data.timestamp
+      : '--';
 
   const summaryCards = useMemo(
     () => [
-      { key: 'status', label: 'Connection', value: status === 'offline' ? 'Offline' : 'Online' },
-      { key: 'uptime', label: 'Uptime', value: `${Math.round(data?.uptime ?? 0)} s` },
-      { key: 'power', label: 'Power', value: `${Math.round(data?.powerMw ?? 0)} mW` },
-      { key: 'battery', label: 'Battery', value: `${Math.round(data?.batteryPercent ?? 0)}%` }
+      { key: 'status', label: 'Conexiune', value: status === 'offline' ? 'Offline' : 'Conectat' },
+      { key: 'uptime', label: 'Timp activ', value: `${Math.round(data?.uptime ?? 0)} s` },
+      { key: 'power', label: 'Putere', value: `${(data?.powerMw ?? 0).toFixed(1)} mW` },
+      { key: 'battery', label: 'Baterie', value: `${Math.round(data?.batteryPercent ?? 0)}%` }
     ],
     [data?.batteryPercent, data?.powerMw, data?.uptime, status]
   );
 
-  const selectedSeries = selectedCard?.history.slice(-90) ?? [];
+  const selectedCard = useMemo(() => cards.find((c) => c.cmd === selectedCmd) ?? null, [cards, selectedCmd]);
+  const selectedSeries = selectedCard?.history.slice(-5000) ?? [];
   const detailStats = useMemo(() => {
     if (!selectedSeries.length) {
       return { min: 0, max: 0, avg: 0, points: 0 };
@@ -182,14 +219,14 @@ export default function OverviewScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <View style={styles.heroTop}>
-            <Text style={styles.heroTitle}>ESP32 Dashboard</Text>
+            <Text style={styles.heroTitle}>Panou ESP32</Text>
             <View style={[styles.statusBadge, status === 'offline' ? styles.statusBadgeOffline : styles.statusBadgeOnline]}>
               <Text style={[styles.statusText, status === 'offline' ? styles.statusTextOffline : styles.statusTextOnline]}>
                 {status === 'offline' ? 'Offline' : 'Online'}
               </Text>
             </View>
           </View>
-          <Text style={styles.heroSubtitle}>Live monitoring and module control in one place.</Text>
+          <Text style={styles.heroSubtitle}>Monitorizare live și control module într-un singur loc.</Text>
 
           <View style={styles.healthRow}>
             <View style={styles.healthItem}>
@@ -206,9 +243,9 @@ export default function OverviewScreen() {
                   }
                 ]}
               />
-              <Text style={styles.healthText}>Connection {status === 'offline' ? 'Offline' : 'Stable'}</Text>
+              <Text style={styles.healthText}>Conexiune {status === 'offline' ? 'Offline' : 'Stabilă'}</Text>
             </View>
-            <Text style={styles.healthText}>Last Updated {lastUpdated}</Text>
+            <Text style={styles.healthText}>Ultima actualizare {lastUpdated}</Text>
           </View>
 
           <View style={styles.metaRow}>
@@ -228,14 +265,14 @@ export default function OverviewScreen() {
 
         <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
 
-        <SectionHeader title="Environment Sensors" count={environmentCards.length} onActionPress={onExportPress} actionLabel="Export JSON" />
+        <SectionHeader title="Senzori de mediu" count={environmentCards.length} onActionPress={onExportPress} actionLabel="Export JSON" />
         <View style={styles.cardRow}>
           {environmentCards.map((item) => (
             <View key={item.title} style={styles.cardWrap}>
               <DeviceCard
                 {...item}
                 enabled={moduleStates[item.cmd]}
-                onPress={() => setSelectedCard(item)}
+                onPress={() => setSelectedCmd(item.cmd)}
                 onToggle={(value) => {
                   sendModuleCommand(item.cmd, value);
                 }}
@@ -244,14 +281,14 @@ export default function OverviewScreen() {
           ))}
         </View>
 
-        <SectionHeader title="Power & System" count={systemCards.length} />
+        <SectionHeader title="Putere și sistem" count={systemCards.length} />
         <View style={styles.cardRow}>
           {systemCards.map((item) => (
             <View key={item.title} style={styles.cardWrap}>
               <DeviceCard
                 {...item}
                 enabled={moduleStates[item.cmd]}
-                onPress={() => setSelectedCard(item)}
+                onPress={() => setSelectedCmd(item.cmd)}
                 onToggle={(value) => {
                   sendModuleCommand(item.cmd, value);
                 }}
@@ -261,8 +298,8 @@ export default function OverviewScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={!!selectedCard} transparent animationType="fade" onRequestClose={() => setSelectedCard(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedCard(null)}>
+      <Modal visible={!!selectedCard} transparent animationType="fade" onRequestClose={() => setSelectedCmd(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedCmd(null)}>
           <Pressable
             style={styles.modalCard}
             onPress={(event) => {
@@ -276,15 +313,15 @@ export default function OverviewScreen() {
                     <Text style={styles.modalTitle}>{selectedCard.icon} {selectedCard.title}</Text>
                     <Text style={styles.modalSubtitle}>Detaliu extins cu scala 0 - {selectedCard.detailLabel(modalScaleMax)}</Text>
                   </View>
-                  <Pressable style={styles.closeButton} onPress={() => setSelectedCard(null)}>
-                    <Text style={styles.closeText}>Inchide</Text>
+                  <Pressable style={styles.closeButton} onPress={() => setSelectedCmd(null)}>
+                    <Text style={styles.closeText}>Închide</Text>
                   </Pressable>
                 </View>
 
                 <FullChart
                   title="Ultimele valori"
                   data={selectedSeries}
-                  xValues={history.timeline.slice(-90)}
+                  xValues={history.timeline.slice(-5000)}
                   color={selectedCard.color}
                   label={selectedCard.detailLabel}
                   height={290}

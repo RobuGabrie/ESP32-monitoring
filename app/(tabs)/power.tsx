@@ -17,41 +17,49 @@ export default function PowerScreen() {
     ? history.currentHistory.reduce((acc, n) => acc + n, 0) / history.currentHistory.length
     : data?.current ?? 0;
 
-  const usedMah = data?.totalMah && data.totalMah > 0 ? data.totalMah : totalCurrentMah;
-  const remainingMah = Math.max(BATTERY_CAPACITY - usedMah, 0);
+  const batteryPresent = (data?.volt ?? 0) > 2.5;
+  const usedMah = batteryPresent && data?.totalMah && data.totalMah > 0 ? data.totalMah : batteryPresent ? totalCurrentMah : 0;
+  const remainingMah = batteryPresent ? Math.max(BATTERY_CAPACITY - usedMah, 0) : 0;
   const fallbackPercent = (remainingMah / BATTERY_CAPACITY) * 100;
-  const percent = data?.batteryPercent && data.batteryPercent > 0 ? data.batteryPercent : fallbackPercent;
+  const percent = batteryPresent
+    ? data?.batteryPercent && data.batteryPercent > 0
+      ? data.batteryPercent
+      : fallbackPercent
+    : 0;
   const fallbackRemainingHours = remainingMah / Math.max(avgCurrent, 0.1);
-  const remainingHours = data?.batteryLifeMin && data.batteryLifeMin > 0 ? data.batteryLifeMin / 60 : fallbackRemainingHours;
+  const hasEstimate = batteryPresent && (((data?.batteryLifeMin ?? -1) > 0) || (percent > 0 && avgCurrent > 1));
+  const remainingHours = hasEstimate
+    ? (data?.batteryLifeMin && data.batteryLifeMin > 0 ? data.batteryLifeMin / 60 : fallbackRemainingHours)
+    : -1;
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <TabHero
-          title="Power"
-          subtitle="Voltage, current behavior, and battery estimates."
-          statusLabel={status === 'offline' ? 'Offline' : 'Online'}
+          title="Putere"
+          subtitle="Tensiune, curent și estimări pentru baterie."
+          statusLabel={status === 'offline' ? 'Offline' : 'Conectat'}
           statusTone={status === 'offline' ? 'offline' : 'online'}
           meta={[
-            { label: 'Realtime', value: `${Math.round(data?.current ?? 0)}mA` },
-            { label: 'Battery', value: `${Math.round(percent)}%` }
+            { label: 'Curent', value: `${(data?.current ?? 0).toFixed(1)} mA` },
+            { label: 'Baterie', value: `${Math.round(percent)}%` }
           ]}
         />
 
-        <SectionHeader title="Power Trends" count={2} />
+        <SectionHeader title="Trend putere" count={2} />
         <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
-        <FullChart title="Supply Voltage" data={history.voltHistory} xValues={history.timeline} color="#0F766E" label={(v) => `${v.toFixed(2)}V`} />
-        <FullChart title="Current Draw" data={history.currentHistory} xValues={history.timeline} color="#DC2626" label={(v) => `${Math.round(v)}mA`} />
+        <FullChart title="Tensiune alimentare" data={history.voltHistory} xValues={history.timeline} color="#0F766E" label={(v) => `${v.toFixed(2)}V`} />
+        <FullChart title="Curent consumat" data={history.currentHistory} xValues={history.timeline} color="#DC2626" label={(v) => `${v.toFixed(1)}mA`} />
 
-        <SectionHeader title="Battery Insights" count={6} />
+        <SectionHeader title="Informații baterie" count={6} />
         <View style={styles.statsCard}>
-          <Row label="Realtime current" value={`${Math.round(data?.current ?? 0)} mA`} />
-          <Row label="Realtime power" value={`${Math.round(data?.powerMw ?? 0)} mW`} />
-          <Row label="Average current" value={`${Math.round(avgCurrent)} mA`} />
-          <Row label="Peak current" value={`${Math.round(peakCurrent)} mA`} />
+          <Row label="Curent instant" value={`${(data?.current ?? 0).toFixed(1)} mA`} />
+          <Row label="Putere instant" value={`${(data?.powerMw ?? 0).toFixed(1)} mW`} />
+          <Row label="Curent mediu" value={`${avgCurrent.toFixed(1)} mA`} />
+          <Row label="Curent maxim" value={`${peakCurrent.toFixed(1)} mA`} />
           <BatteryBar percent={percent} />
-          <Row label="Estimated remaining" value={`${remainingHours.toFixed(1)} h`} />
-          <Row label="Capacity used" value={`${usedMah.toFixed(1)} mAh`} />
+          <Row label="Autonomie estimată" value={remainingHours > 0 ? `${remainingHours.toFixed(1)} h` : '--'} />
+          <Row label="Capacitate folosită" value={`CP: ${usedMah.toFixed(2)} mAh`} />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -62,7 +70,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowKey}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+      <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -92,6 +100,9 @@ const styles = StyleSheet.create({
   rowValue: {
     color: theme.colors.text,
     fontFamily: theme.font.semiBold,
-    fontSize: 14
+    fontSize: 14,
+    textAlign: 'right',
+    minWidth: 120,
+    flexShrink: 0
   }
 });

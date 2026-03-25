@@ -126,8 +126,7 @@ const normalizeRawIoPayload = (payload: unknown) => {
   }
 
   const ts = extractTimestamp(rec) ?? format(new Date(), 'HH:mm:ss.SSS');
-  const timeMs = toEpochMs(rec.created_at ?? ts, Date.now());
-  return { ts, timeMs, gpio, pcf8591Raw, ina219Raw };
+  return { ts, gpio, pcf8591Raw, ina219Raw };
 };
 
 const normalizePayload = (payload: unknown): ESP32Data | null => {
@@ -555,7 +554,8 @@ const connectSharedMQTT = () => {
         const snapshot = getStoreState().data;
         getStoreState().addLog({
           ts: raw.ts,
-          timeMs: raw.timeMs,
+          // Use client receive time for live filtering to avoid drops when device clock is wrong.
+          timeMs: Date.now(),
           temp: snapshot?.temp ?? 0,
           light: snapshot?.lightPercent ?? snapshot?.light ?? 0,
           gpio: raw.gpio,
@@ -581,7 +581,7 @@ const connectSharedMQTT = () => {
       if (Date.now() - sharedLastRawAtMs > 3000) {
         getStoreState().addLog({
           ts: format(now, 'HH:mm:ss'),
-          timeMs: reading.recordedAtMs ?? Date.now(),
+          timeMs: Date.now(),
           temp: reading.temp,
           light: reading.light,
           gpio: reading.gpio,
