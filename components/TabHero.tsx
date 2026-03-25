@@ -1,3 +1,4 @@
+import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/constants/theme';
@@ -13,9 +14,10 @@ interface Props {
   statusLabel?: string;
   statusTone?: 'online' | 'offline' | 'neutral';
   meta?: MetaItem[];
+  footer?: ReactNode;
 }
 
-export function TabHero({ title, subtitle, statusLabel, statusTone = 'neutral', meta = [] }: Props) {
+export function TabHero({ title, subtitle, statusLabel, statusTone = 'neutral', meta = [], footer }: Props) {
   return (
     <View style={styles.hero}>
       <View style={styles.topRow}>
@@ -54,6 +56,8 @@ export function TabHero({ title, subtitle, statusLabel, statusTone = 'neutral', 
           ))}
         </View>
       ) : null}
+
+      {footer ? <View style={styles.footerWrap}>{footer}</View> : null}
     </View>
   );
 }
@@ -66,7 +70,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E8ECF2',
-    ...theme.shadow.card
+    borderLeftWidth: 3,
+    borderLeftColor: '#BFDBFE'
   },
   topRow: {
     flexDirection: 'row',
@@ -94,6 +99,9 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontFamily: theme.font.medium,
     fontSize: 12
+  },
+  footerWrap: {
+    marginTop: 10
   },
   badge: {
     paddingHorizontal: 10,

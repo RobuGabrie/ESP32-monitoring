@@ -64,7 +64,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E6EBF2',
-    ...theme.shadow.card
+    borderLeftWidth: 3,
+    borderLeftColor: '#DBEAFE'
   },
   cardInteractive: {
     borderColor: '#DCE4F0'

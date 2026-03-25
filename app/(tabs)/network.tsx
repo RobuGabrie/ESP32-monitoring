@@ -82,7 +82,10 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 12
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5EAF1',
+    ...theme.shadow.floating
   },
   modalHeader: {
     flexDirection: 'row',

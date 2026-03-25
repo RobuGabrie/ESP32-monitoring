@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
 import { SectionHeader } from '@/components/SectionHeader';
+import { TabHero } from '@/components/TabHero';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
@@ -217,42 +218,37 @@ export default function OverviewScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <View style={styles.heroTop}>
-            <Text style={styles.heroTitle}>Panou ESP32</Text>
-            <View style={[styles.statusBadge, status === 'offline' ? styles.statusBadgeOffline : styles.statusBadgeOnline]}>
-              <Text style={[styles.statusText, status === 'offline' ? styles.statusTextOffline : styles.statusTextOnline]}>
-                {status === 'offline' ? 'Offline' : 'Online'}
-              </Text>
+        <TabHero
+          title="Panou ESP32"
+          subtitle="Monitorizare live și control module într-un singur loc."
+          statusLabel={status === 'offline' ? 'Offline' : 'Online'}
+          statusTone={status === 'offline' ? 'offline' : 'online'}
+          meta={[
+            { label: 'IP', value: data?.ip ?? '--' },
+            { label: 'SSID', value: data?.ssid ?? '--' }
+          ]}
+          footer={(
+            <View style={styles.healthRow}>
+              <View style={styles.healthItem}>
+                <Animated.View
+                  style={[
+                    styles.healthDot,
+                    status === 'offline' ? styles.healthDotOffline : styles.healthDotOnline,
+                    {
+                      transform: [{ scale: pulseAnim }],
+                      opacity: pulseAnim.interpolate({
+                        inputRange: [1, 1.4],
+                        outputRange: [1, 0.65]
+                      })
+                    }
+                  ]}
+                />
+                <Text style={styles.healthText}>Conexiune {status === 'offline' ? 'Offline' : 'Stabila'}</Text>
+              </View>
+              <Text style={styles.healthText}>Ultima actualizare {lastUpdated}</Text>
             </View>
-          </View>
-          <Text style={styles.heroSubtitle}>Monitorizare live și control module într-un singur loc.</Text>
-
-          <View style={styles.healthRow}>
-            <View style={styles.healthItem}>
-              <Animated.View
-                style={[
-                  styles.healthDot,
-                  status === 'offline' ? styles.healthDotOffline : styles.healthDotOnline,
-                  {
-                    transform: [{ scale: pulseAnim }],
-                    opacity: pulseAnim.interpolate({
-                      inputRange: [1, 1.4],
-                      outputRange: [1, 0.65]
-                    })
-                  }
-                ]}
-              />
-              <Text style={styles.healthText}>Conexiune {status === 'offline' ? 'Offline' : 'Stabilă'}</Text>
-            </View>
-            <Text style={styles.healthText}>Ultima actualizare {lastUpdated}</Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaText}>IP: {data?.ip ?? '--'}</Text>
-            <Text style={styles.metaText}>SSID: {data?.ssid ?? '--'}</Text>
-          </View>
-        </View>
+          )}
+        />
 
         <View style={styles.summaryGrid}>
           {summaryCards.map((item) => (
@@ -361,64 +357,7 @@ export default function OverviewScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 16, paddingBottom: 110 },
-  hero: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E8ECF2',
-    ...theme.shadow.card
-  },
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  heroTitle: {
-    color: theme.colors.text,
-    fontFamily: theme.font.bold,
-    fontSize: 24
-  },
-  heroSubtitle: {
-    marginTop: 4,
-    color: theme.colors.muted,
-    fontFamily: theme.font.regular,
-    fontSize: 13
-  },
-  metaRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  metaText: {
-    color: '#4B5563',
-    fontFamily: theme.font.medium,
-    fontSize: 12
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999
-  },
-  statusBadgeOnline: {
-    backgroundColor: '#DCFCE7'
-  },
-  statusBadgeOffline: {
-    backgroundColor: '#FEE2E2'
-  },
-  statusText: {
-    fontFamily: theme.font.medium,
-    fontSize: 12
-  },
-  statusTextOnline: {
-    color: '#166534'
-  },
-  statusTextOffline: {
-    color: '#B91C1C'
-  },
+  content: { padding: 16, paddingBottom: 120 },
   summaryGrid: {
     marginBottom: 16,
     flexDirection: 'row',
@@ -426,8 +365,9 @@ const styles = StyleSheet.create({
     gap: 10
   },
   summaryCard: {
-    width: '47.8%',
-    backgroundColor: '#FAFBFD',
+    flexBasis: '48%',
+    minWidth: 150,
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5EAF1',
@@ -476,7 +416,8 @@ const styles = StyleSheet.create({
   },
   cardRow: {
     flexDirection: 'row',
-    gap: 12
+    gap: 12,
+    alignItems: 'stretch'
   },
   cardWrap: { flex: 1 },
   modalBackdrop: {
@@ -491,7 +432,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: '#E5EAF1',
-    maxHeight: '92%'
+    maxHeight: '92%',
+    ...theme.shadow.floating
   },
   modalHeader: {
     marginBottom: 6,
@@ -528,8 +470,9 @@ const styles = StyleSheet.create({
     gap: 8
   },
   statItem: {
-    width: '48.5%',
-    backgroundColor: '#F8FAFC',
+    flexBasis: '48%',
+    minWidth: 140,
+    backgroundColor: theme.colors.surfaceMuted,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 12,

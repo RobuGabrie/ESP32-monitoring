@@ -1,5 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
+import { theme } from '@/constants/theme';
+
 interface Props {
   rssi: number | string | null | undefined;
 }
@@ -55,9 +57,13 @@ function Bar({ index, level, withRightSpacing }: { index: number; level: number;
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.card,
     borderRadius: 18,
     padding: 14,
+    borderWidth: 1,
+    borderColor: '#E6EBF2',
+    borderLeftWidth: 3,
+    borderLeftColor: '#D1FAE5',
     flexDirection: 'row',
     alignItems: 'flex-end',
     marginBottom: 14

@@ -321,8 +321,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingHorizontal: 12,
     marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: '#E6EBF2',
     overflow: 'hidden',
-    ...theme.shadow.card
+    borderLeftWidth: 3,
+    borderLeftColor: '#E2E8F0'
   },
   title: {
     marginTop: 10,

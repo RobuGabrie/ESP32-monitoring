@@ -2,6 +2,8 @@ export const theme = {
   colors: {
     background: '#F1F3F5',
     card: '#FFFFFF',
+    surfaceMuted: '#F8FAFC',
+    surfaceAlt: '#EEF2F7',
     primary: '#2563EB',
     muted: '#6B7280',
     text: '#111827',
@@ -27,10 +29,17 @@ export const theme = {
   shadow: {
     card: {
       shadowColor: '#000',
-      shadowOpacity: 0.12,
+      shadowOpacity: 0.08,
       shadowRadius: 8,
       shadowOffset: { width: 0, height: 3 },
       elevation: 3
+    },
+    floating: {
+      shadowColor: '#000',
+      shadowOpacity: 0.14,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 6
     }
   },
   font: {

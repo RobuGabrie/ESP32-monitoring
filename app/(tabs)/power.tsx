@@ -79,12 +79,13 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 16, paddingBottom: 120 },
   statsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E6EBF2',
     padding: 14,
-    ...theme.shadow.card
+    borderLeftWidth: 3,
+    borderLeftColor: '#CFFAFE'
   },
   row: {
     flexDirection: 'row',

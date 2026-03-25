@@ -142,19 +142,20 @@ export function LogArea({ entries }: Props) {
 
 const styles = StyleSheet.create({
   shell: {
-    backgroundColor: '#050A0F',
+    backgroundColor: '#070E14',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#113247',
-    padding: 10,
-    ...theme.shadow.card
+    borderColor: '#1C3E56',
+    padding: 10
   },
   serialHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
     paddingBottom: 8,
+    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#16384D'
   },
@@ -172,6 +173,7 @@ const styles = StyleSheet.create({
   },
   controlsWrap: {
     alignItems: 'flex-end',
+    marginLeft: 'auto',
     gap: 6
   },
   controlsRow: {
@@ -202,8 +204,8 @@ const styles = StyleSheet.create({
     fontFamily: theme.font.medium
   },
   wrap: {
-    minHeight: 360,
-    maxHeight: 460
+    minHeight: 280,
+    maxHeight: 420
   },
   content: {
     gap: 6

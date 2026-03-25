@@ -15,12 +15,12 @@ interface Props {
 export function NetworkTable({ rows }: Props) {
   return (
     <View style={styles.card}>
-      {rows.map((row) => (
-        <View style={styles.row} key={row.keyLabel}>
+      {rows.map((row, index) => (
+        <View style={[styles.row, index === rows.length - 1 ? styles.rowLast : null]} key={row.keyLabel}>
           <Text style={styles.key}>{row.keyLabel}</Text>
           <View style={styles.valueWrap}>
             {row.statusDot ? <View style={styles.dot} /> : null}
-            <Text style={styles.value}>{row.value}</Text>
+            <Text style={styles.value} numberOfLines={1} ellipsizeMode="middle">{row.value}</Text>
           </View>
         </View>
       ))}
@@ -33,8 +33,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     padding: 14,
+    borderWidth: 1,
+    borderColor: '#E6EBF2',
     marginBottom: theme.spacing.md,
-    ...theme.shadow.card
+    borderLeftWidth: 3,
+    borderLeftColor: '#DBEAFE'
   },
   row: {
     flexDirection: 'row',
@@ -52,12 +55,19 @@ const styles = StyleSheet.create({
   valueWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 8,
+    maxWidth: '60%',
+    flexShrink: 1
   },
   value: {
     color: theme.colors.text,
     fontFamily: theme.font.semiBold,
-    fontSize: 13
+    fontSize: 13,
+    flexShrink: 1
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0
   },
   dot: {
     width: 10,
