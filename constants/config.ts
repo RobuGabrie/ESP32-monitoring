@@ -1,0 +1,11 @@
+export const MQTT_BROKER = 'broker.emqx.io';
+export const MQTT_PORT = 1883;
+export const MQTT_WS_PROTOCOL = 'wss';
+export const MQTT_WS_PORT = 8084;
+export const MQTT_TOPIC = 'hardandsoft/esp32/data';
+export const MQTT_CMD_TOPIC = 'hardandsoft/esp32/cmd';
+export const MQTT_STATE_TOPIC = 'hardandsoft/esp32/state';
+export const MQTT_USER = 'emqx';
+export const MQTT_PASS = 'public';
+export const BATTERY_CAPACITY = 2000;
+export const USE_MOCK = false;

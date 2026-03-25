@@ -1,0 +1,125 @@
+import { StyleSheet, Text, View } from 'react-native';
+
+import { theme } from '@/constants/theme';
+
+interface MetaItem {
+  label: string;
+  value: string;
+}
+
+interface Props {
+  title: string;
+  subtitle: string;
+  statusLabel?: string;
+  statusTone?: 'online' | 'offline' | 'neutral';
+  meta?: MetaItem[];
+}
+
+export function TabHero({ title, subtitle, statusLabel, statusTone = 'neutral', meta = [] }: Props) {
+  return (
+    <View style={styles.hero}>
+      <View style={styles.topRow}>
+        <Text style={styles.title}>{title}</Text>
+        {statusLabel ? (
+          <View
+            style={[
+              styles.badge,
+              statusTone === 'online' ? styles.badgeOnline : null,
+              statusTone === 'offline' ? styles.badgeOffline : null,
+              statusTone === 'neutral' ? styles.badgeNeutral : null
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgeText,
+                statusTone === 'online' ? styles.badgeTextOnline : null,
+                statusTone === 'offline' ? styles.badgeTextOffline : null,
+                statusTone === 'neutral' ? styles.badgeTextNeutral : null
+              ]}
+            >
+              {statusLabel}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={styles.subtitle}>{subtitle}</Text>
+
+      {meta.length ? (
+        <View style={styles.metaWrap}>
+          {meta.map((item) => (
+            <Text key={`${item.label}:${item.value}`} style={styles.metaText}>
+              {item.label}: {item.value}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  hero: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.lg,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E8ECF2',
+    ...theme.shadow.card
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  title: {
+    color: theme.colors.text,
+    fontFamily: theme.font.bold,
+    fontSize: 23
+  },
+  subtitle: {
+    marginTop: 4,
+    color: theme.colors.muted,
+    fontFamily: theme.font.regular,
+    fontSize: 13
+  },
+  metaWrap: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  metaText: {
+    color: '#4B5563',
+    fontFamily: theme.font.medium,
+    fontSize: 12
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999
+  },
+  badgeOnline: {
+    backgroundColor: '#DCFCE7'
+  },
+  badgeOffline: {
+    backgroundColor: '#FEE2E2'
+  },
+  badgeNeutral: {
+    backgroundColor: '#E2E8F0'
+  },
+  badgeText: {
+    fontFamily: theme.font.medium,
+    fontSize: 12
+  },
+  badgeTextOnline: {
+    color: '#166534'
+  },
+  badgeTextOffline: {
+    color: '#B91C1C'
+  },
+  badgeTextNeutral: {
+    color: '#334155'
+  }
+});
