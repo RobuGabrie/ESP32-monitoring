@@ -5,7 +5,7 @@ import { theme } from '@/constants/theme';
 interface Row {
   keyLabel: string;
   value: string;
-  statusDot?: boolean;
+  statusTone?: 'online' | 'offline';
 }
 
 interface Props {
@@ -19,8 +19,13 @@ export function NetworkTable({ rows }: Props) {
         <View style={[styles.row, index === rows.length - 1 ? styles.rowLast : null]} key={row.keyLabel}>
           <Text style={styles.key}>{row.keyLabel}</Text>
           <View style={styles.valueWrap}>
-            {row.statusDot ? <View style={styles.dot} /> : null}
-            <Text style={styles.value} numberOfLines={1} ellipsizeMode="middle">{row.value}</Text>
+            {row.statusTone ? (
+              <View style={[styles.statusPill, row.statusTone === 'online' ? styles.statusPillOnline : styles.statusPillOffline]}>
+                <Text style={[styles.statusText, row.statusTone === 'online' ? styles.statusTextOnline : styles.statusTextOffline]}>{row.value}</Text>
+              </View>
+            ) : (
+              <Text style={styles.value} numberOfLines={1} ellipsizeMode="middle">{row.value}</Text>
+            )}
           </View>
         </View>
       ))}
@@ -49,8 +54,8 @@ const styles = StyleSheet.create({
   },
   key: {
     color: theme.colors.muted,
-    fontFamily: theme.font.medium,
-    fontSize: 13
+    fontFamily: theme.font.regular,
+    fontSize: 12
   },
   valueWrap: {
     flexDirection: 'row',
@@ -69,10 +74,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingBottom: 0
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10B981'
+  statusPill: {
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10
+  },
+  statusPillOnline: {
+    backgroundColor: '#DCFCE7'
+  },
+  statusPillOffline: {
+    backgroundColor: '#FEE2E2'
+  },
+  statusText: {
+    fontFamily: theme.font.semiBold,
+    fontSize: 12
+  },
+  statusTextOnline: {
+    color: '#166534'
+  },
+  statusTextOffline: {
+    color: '#B91C1C'
   }
 });

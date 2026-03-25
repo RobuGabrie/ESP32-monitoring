@@ -20,7 +20,7 @@ const smoothSeries = (input: number[], alpha = 0.35) => {
   return out;
 };
 
-const buildSmoothPath = (points: Array<{ x: number; y: number }>) => {
+const buildSmoothPath = (points: { x: number; y: number }[]) => {
   if (!points.length) {
     return '';
   }

@@ -42,14 +42,21 @@ export default function NetworkScreen() {
             { keyLabel: 'Canal', value: String(data?.channel ?? '--') },
             { keyLabel: 'Timp activ', value: `${Math.round(data?.uptime ?? 0)} s` },
             { keyLabel: 'Timestamp', value: data?.timestamp || '--' },
-            { keyLabel: 'Status', value: status === 'online' ? 'Conectat' : 'Offline', statusDot: status === 'online' }
+            { keyLabel: 'Status', value: status === 'online' ? 'Conectat' : 'Offline', statusTone: status === 'online' ? 'online' : 'offline' }
           ]}
         />
 
         <SectionHeader title="Trend RSSI" count={1} />
         <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
         <Pressable onPress={() => setShowRssiModal(true)}>
-          <FullChart title="Istoric RSSI" data={history.rssiHistory} xValues={history.timeline} color="#10B981" label={(v) => `${Math.round(v)} dBm`} />
+          <FullChart
+            title="Istoric RSSI (dBm)"
+            data={history.rssiHistory}
+            xValues={history.timeline}
+            color={theme.chart.palette.rssi}
+            label={(v) => `${Math.round(v)} dBm`}
+            showLegend
+          />
         </Pressable>
       </ScrollView>
 
@@ -62,7 +69,15 @@ export default function NetworkScreen() {
                 <Text style={styles.modalClose}>Închide</Text>
               </Pressable>
             </View>
-            <FullChart title="Istoric RSSI" height={300} data={history.rssiHistory} xValues={history.timeline} color="#10B981" label={(v) => `${Math.round(v)} dBm`} />
+            <FullChart
+              title="Istoric RSSI (dBm)"
+              height={300}
+              data={history.rssiHistory}
+              xValues={history.timeline}
+              color={theme.chart.palette.rssi}
+              label={(v) => `${Math.round(v)} dBm`}
+              showLegend
+            />
           </Pressable>
         </Pressable>
       </Modal>

@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/constants/theme';
 
@@ -30,14 +30,33 @@ const levelFromRssi = (rssi: Props['rssi']) => {
   return 0;
 };
 
+const labelFromLevel = (level: number) => {
+  if (level >= 4) return 'Excelent';
+  if (level === 3) return 'Bun';
+  if (level === 2) return 'Mediu';
+  if (level === 1) return 'Slab';
+  return 'Foarte slab';
+};
+
 export function SignalBars({ rssi }: Props) {
+  const safeRssi = toSafeRssi(rssi);
   const level = levelFromRssi(rssi);
+  const levelLabel = labelFromLevel(level);
 
   return (
     <View style={styles.wrap}>
-      {[1, 2, 3, 4].map((n) => (
-        <Bar key={n} index={n} level={level} withRightSpacing={n < 4} />
-      ))}
+      <View style={styles.barsRow}>
+        {[1, 2, 3, 4].map((n) => (
+          <Bar key={n} index={n} level={level} withRightSpacing={n < 4} />
+        ))}
+      </View>
+      <View style={styles.labelWrap}>
+        <Text style={styles.value}>{`${Math.round(safeRssi)} dBm`}</Text>
+        <View style={styles.levelPill}>
+          <Text style={styles.levelPillText}>{levelLabel}</Text>
+        </View>
+        <Text style={styles.label}>Calitate semnal Wi-Fi</Text>
+      </View>
     </View>
   );
 }
@@ -65,8 +84,42 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#D1FAE5',
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 14
+  },
+  barsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end'
+  },
+  labelWrap: {
+    alignItems: 'flex-end'
+  },
+  value: {
+    color: theme.colors.text,
+    fontFamily: theme.font.bold,
+    fontSize: 18
+  },
+  label: {
+    marginTop: 4,
+    color: theme.colors.textSoft,
+    fontFamily: theme.font.medium,
+    fontSize: 12
+  },
+  levelPill: {
+    marginTop: 4,
+    borderRadius: 999,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 9,
+    paddingVertical: 3
+  },
+  levelPillText: {
+    color: '#065F46',
+    fontFamily: theme.font.semiBold,
+    fontSize: 11
   },
   bar: {
     width: 16,

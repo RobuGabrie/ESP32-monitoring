@@ -1,39 +1,46 @@
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
-import { FullChart } from '@/components/FullChart';
 import { LogArea } from '@/components/LogArea';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TabHero } from '@/components/TabHero';
-import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
 
 export default function SensorsScreen() {
-  const { history, ioLog, data, status, selectedRange, setTimeRange } = useESP32();
+  const { ioLog, status } = useESP32();
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <TabHero
-          title="Senzori"
-          subtitle="Telemetrie în timp real plus flux serial brut 1Hz pentru GPIO/I2C."
+          title="Senzori / I/O"
+          subtitle="Tab dedicat fluxului serial brut si activitatii I/O in timp real."
           statusLabel={status === 'offline' ? 'Offline' : 'Conectat'}
           statusTone={status === 'offline' ? 'offline' : 'online'}
           meta={[
-            { label: 'Temperatură', value: `${(data?.temp ?? 0).toFixed(1)} °C` },
-            { label: 'Lumină', value: `${(data?.lightPercent ?? data?.light ?? 0).toFixed(1)} %` }
+            { label: 'Canal', value: 'hardandsoft/esp32/gpio_raw' },
+            { label: 'Cadenta', value: '1Hz stream' }
           ]}
         />
 
-        <SectionHeader title="Trend senzori" count={2} />
-        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
-        <Text style={styles.axisHint}>Axa X reprezintă ora citirilor din intervalul selectat.</Text>
-        <FullChart title="Temperatură" data={history.tempHistory} xValues={history.timeline} color="#2563EB" label={(v) => `${v.toFixed(1)} °C`} />
-        <FullChart title="Intensitate lumină" data={history.lightHistory} xValues={history.timeline} color="#F59E0B" label={(v) => `${v.toFixed(1)} %`} />
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Ionicons name="information-circle-outline" size={15} color="#1D4ED8" />
+            <Text style={styles.infoText}>Valorile de senzori sunt disponibile in Monitor/Putere/Rețea.</Text>
+          </View>
+          <View style={styles.infoDivider} />
+          <View style={styles.infoRow}>
+            <Ionicons name="terminal-outline" size={15} color="#1D4ED8" />
+            <Text style={styles.infoText}>Aici este pastrat doar fluxul brut pentru debug hardware.</Text>
+          </View>
+        </View>
 
-        <SectionHeader title="Activitate I/O (serial)" count={ioLog.length} />
-        <LogArea entries={ioLog} />
+        <View style={styles.serialShell}>
+          <SectionHeader title="Activitate I/O (serial)" count={ioLog.length} countLabel="mesaje" />
+          <LogArea entries={ioLog} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -42,11 +49,35 @@ export default function SensorsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 16, paddingBottom: 120 },
-  axisHint: {
-    marginTop: -2,
-    marginBottom: 8,
-    color: '#64748B',
-    fontSize: 12,
+  infoCard: {
+    marginBottom: 12,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: theme.colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0'
+  },
+  infoText: {
+    color: '#334155',
+    fontSize: 13,
     fontFamily: theme.font.medium
+  },
+  serialShell: {
+    borderRadius: theme.radius.md,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#D9E2EC',
+    padding: 10
   }
 });

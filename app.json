@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ESP32 Monitor",
-    "slug": "esp32-monitor",
+    "slug": "esp32",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,6 +26,13 @@
     },
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5e95bd49-0790-4ea2-a834-e10a4486bf04"
+      }
+    },
+    "owner": "gabrielrobu"
   }
 }

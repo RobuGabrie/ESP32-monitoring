@@ -5,21 +5,24 @@ import { theme } from '@/constants/theme';
 interface Props {
   title: string;
   count: number;
+  countLabel?: string;
   actionLabel?: string;
   onActionPress?: () => void;
 }
 
-export function SectionHeader({ title, count, actionLabel = 'Export', onActionPress }: Props) {
+export function SectionHeader({ title, count, countLabel, actionLabel = 'Export', onActionPress }: Props) {
+  const countText = countLabel ? `${count} ${countLabel}` : String(count);
+
   return (
     <View style={styles.row}>
       <View style={styles.titleWrap}>
         <Text style={styles.title}>{title}</Text>
         <View style={styles.countBadge}>
-          <Text style={styles.countText}>{count}</Text>
+          <Text style={styles.countText}>{countText}</Text>
         </View>
       </View>
       {onActionPress ? (
-        <Pressable onPress={onActionPress} style={styles.actionButton}>
+        <Pressable onPress={onActionPress} style={({ pressed }) => [styles.actionButton, pressed ? styles.actionButtonPressed : null]}>
           <Text style={styles.actionText}>{actionLabel}</Text>
         </Pressable>
       ) : null}
@@ -31,26 +34,28 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 10,
     marginBottom: theme.spacing.md
   },
   titleWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8
   },
   title: {
-    fontFamily: theme.font.semiBold,
-    fontSize: 18,
+    ...theme.type.sectionTitle,
     color: theme.colors.text
   },
   countBadge: {
     minWidth: 24,
     borderRadius: 999,
-    backgroundColor: '#E6EEFF',
+    backgroundColor: theme.accents.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4
   },
   countText: {
@@ -59,14 +64,21 @@ const styles = StyleSheet.create({
     fontSize: 12
   },
   actionButton: {
-    backgroundColor: '#E6EEFF',
+    minHeight: theme.touch.minTarget,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 8
+    paddingVertical: 10,
+    justifyContent: 'center'
+  },
+  actionButtonPressed: {
+    opacity: 0.92
   },
   actionText: {
-    color: theme.colors.primary,
-    fontFamily: theme.font.medium,
+    color: '#1D4ED8',
+    fontFamily: theme.font.semiBold,
     fontSize: 13
   }
 });

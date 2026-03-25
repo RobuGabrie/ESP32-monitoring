@@ -4,14 +4,23 @@ export const theme = {
     card: '#FFFFFF',
     surfaceMuted: '#F8FAFC',
     surfaceAlt: '#EEF2F7',
+    surfaceRaised: '#FFFFFF',
     primary: '#2563EB',
     muted: '#6B7280',
+    textSoft: '#475569',
     text: '#111827',
     border: '#E5E7EB',
     success: '#16A34A',
     warning: '#D97706',
     danger: '#DC2626',
+    info: '#0EA5E9',
     logBg: '#0F172A'
+  },
+  accents: {
+    primary: '#DBEAFE',
+    success: '#D1FAE5',
+    warning: '#FEF3C7',
+    neutral: '#E2E8F0'
   },
   spacing: {
     xs: 6,
@@ -47,5 +56,39 @@ export const theme = {
     medium: 'DMSans_500Medium',
     semiBold: 'DMSans_500Medium',
     bold: 'DMSans_700Bold'
+  },
+  type: {
+    sectionTitle: {
+      fontSize: 18,
+      fontFamily: 'DMSans_700Bold' as const
+    },
+    cardLabel: {
+      fontSize: 12,
+      fontFamily: 'DMSans_500Medium' as const
+    },
+    cardValue: {
+      fontSize: 24,
+      fontFamily: 'DMSans_700Bold' as const
+    }
+  },
+  touch: {
+    minTarget: 44
+  },
+  chart: {
+    palette: {
+      temperature: '#2563EB',
+      light: '#F59E0B',
+      voltage: '#0F766E',
+      current: '#DC2626',
+      rssi: '#10B981'
+    },
+    strokeWidth: {
+      normal: 2.15,
+      emphasized: 2.35
+    },
+    fillOpacity: {
+      start: 0.18,
+      end: 0.04
+    }
   }
 } as const;

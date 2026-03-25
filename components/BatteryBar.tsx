@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { theme } from '@/constants/theme';
+
 interface Props {
   percent: number;
 }
@@ -27,7 +29,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 16,
     borderRadius: 999,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: theme.colors.border,
     overflow: 'hidden'
   },
   fill: {
@@ -36,8 +38,9 @@ const styles = StyleSheet.create({
   },
   label: {
     marginTop: 8,
-    color: '#2563EB',
-    fontFamily: 'DMSans_700Bold',
-    fontSize: 32
+    color: theme.colors.primary,
+    fontFamily: theme.font.bold,
+    fontSize: 28,
+    lineHeight: 34
   }
 });

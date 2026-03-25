@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { Sparkline } from '@/components/Sparkline';
 import { ToggleSwitch } from '@/components/ToggleSwitch';
 import { theme } from '@/constants/theme';
 
 interface Props {
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   source: string;
   value: string;
@@ -29,7 +30,9 @@ export function DeviceCard({ icon, title, source, value, color, history, enabled
     >
       <View style={styles.topRow}>
         <View style={styles.titleWrap}>
-          <Text style={styles.icon}>{icon}</Text>
+          <View style={styles.iconBadge}>
+            <Ionicons name={icon} size={16} color="#1D4ED8" />
+          </View>
           <Text style={styles.title}>{title}</Text>
         </View>
         <ToggleSwitch value={enabled} onChange={onToggle} />
@@ -37,7 +40,13 @@ export function DeviceCard({ icon, title, source, value, color, history, enabled
 
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.source}>{source}</Text>
-      {onPress ? <Text style={styles.hint}>Tap pentru detalii</Text> : null}
+      <Text style={styles.stateHint}>{enabled ? 'Modul activ' : 'Modul oprit'}</Text>
+      {onPress ? (
+        <View style={styles.hintRow}>
+          <Text style={styles.hint}>Tap pentru detalii</Text>
+          <Ionicons name="chevron-forward" size={13} color="#64748B" />
+        </View>
+      ) : null}
 
       <View
         style={styles.chartWrap}
@@ -58,6 +67,7 @@ export function DeviceCard({ icon, title, source, value, color, history, enabled
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+    minHeight: 214,
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     padding: 12,
@@ -65,7 +75,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E6EBF2',
     borderLeftWidth: 3,
-    borderLeftColor: '#DBEAFE'
+    borderLeftColor: theme.accents.primary
   },
   cardInteractive: {
     borderColor: '#DCE4F0'
@@ -84,19 +94,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6
   },
-  icon: {
-    fontSize: 18
+  iconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    backgroundColor: '#EAF2FF',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   title: {
-    fontSize: 14,
+    fontSize: 12,
     color: theme.colors.muted,
     fontFamily: theme.font.medium
   },
   value: {
     marginTop: 8,
-    fontSize: 22,
+    ...theme.type.cardValue,
     color: theme.colors.text,
-    fontFamily: theme.font.bold
+    lineHeight: 30
   },
   source: {
     alignSelf: 'flex-start',
@@ -110,8 +125,19 @@ const styles = StyleSheet.create({
     fontFamily: theme.font.medium
   },
   hint: {
-    marginTop: 5,
     color: '#64748B',
+    fontFamily: theme.font.medium,
+    fontSize: 12
+  },
+  hintRow: {
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2
+  },
+  stateHint: {
+    marginTop: 6,
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 11
   },
@@ -119,6 +145,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     width: '100%',
     alignItems: 'center',
+    paddingBottom: 2,
     overflow: 'hidden'
   }
 });

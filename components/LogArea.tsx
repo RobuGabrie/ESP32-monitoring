@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { IOLogEntry } from '@/hooks/useStore';
 import { theme } from '@/constants/theme';
@@ -8,13 +9,46 @@ interface Props {
   entries: IOLogEntry[];
 }
 
+const renderKvTokens = (line: string) => {
+  const parts = line.split(/(\s+)/);
+  return parts.map((part, idx) => {
+    if (!part.length) {
+      return null;
+    }
+
+    if (/^\s+$/.test(part)) {
+      return <Text key={`space-${idx}`}>{part}</Text>;
+    }
+
+    const kvMatch = part.match(/^([^=]+)=([^=]+)$/);
+    if (!kvMatch) {
+      return <Text key={`raw-${idx}`} style={styles.kvNeutral}>{part}</Text>;
+    }
+
+    const [, key, value] = kvMatch;
+    const numeric = Number(value);
+    const active = Number.isFinite(numeric) && numeric > 0;
+
+    return (
+      <Text key={`kv-${idx}`}>
+        <Text style={styles.kvKey}>{`${key}=`}</Text>
+        <Text style={[styles.kvValue, active ? styles.kvOn : styles.kvOff]}>{value}</Text>
+      </Text>
+    );
+  });
+};
+
 export function LogArea({ entries }: Props) {
   const PAGE_SIZE = 50;
   const scrollRef = useRef<ScrollView>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const prevCountRef = useRef(0);
   const [autoScroll, setAutoScroll] = useState(true);
   const [renderLimit, setRenderLimit] = useState(PAGE_SIZE);
   const [showAll, setShowAll] = useState(false);
   const [isStreamingView, setIsStreamingView] = useState(true);
+  const [msgRate, setMsgRate] = useState(0);
+  const [clearCursor, setClearCursor] = useState(0);
   const [frozenEntries, setFrozenEntries] = useState<IOLogEntry[]>([]);
   const serialEntries = useMemo(
     () => entries.filter((entry) => {
@@ -26,7 +60,7 @@ export function LogArea({ entries }: Props) {
     }),
     [entries]
   );
-  const displaySource = isStreamingView ? serialEntries : frozenEntries;
+  const displaySource = isStreamingView ? serialEntries.slice(clearCursor) : frozenEntries;
 
   const ordered = useMemo(() => [...displaySource].reverse(), [displaySource]);
   const visibleEntries = showAll ? ordered : ordered.slice(0, renderLimit);
@@ -41,17 +75,62 @@ export function LogArea({ entries }: Props) {
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, [autoScroll, entries, isStreamingView]);
 
+  useEffect(() => {
+    prevCountRef.current = serialEntries.length;
+    const timer = setInterval(() => {
+      const delta = serialEntries.length - prevCountRef.current;
+      prevCountRef.current = serialEntries.length;
+      setMsgRate(Math.max(0, delta));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [serialEntries.length]);
+
+  useEffect(() => {
+    if (!isStreamingView) {
+      pulseAnim.setValue(1);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.5,
+          duration: 650,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 650,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true
+        })
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [isStreamingView, pulseAnim]);
+
   return (
     <View style={styles.shell}>
       <View style={styles.serialHeader}>
-        <View>
-          <Text style={styles.serialTitle}>SERIAL MONITOR</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.titleRow}>
+            <Ionicons name="terminal" size={15} color="#A5B4FC" />
+            <Text style={styles.serialTitle}>SERIAL MONITOR</Text>
+          </View>
           <Text style={styles.serialMeta}>hardandsoft/esp32/gpio_raw @ 1Hz</Text>
+          <View style={styles.liveRow}>
+            <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
+            <Text style={styles.liveText}>{isStreamingView ? `LIVE ${msgRate}/s` : 'PAUZAT'}</Text>
+          </View>
         </View>
         <View style={styles.controlsWrap}>
           <View style={styles.controlsRow}>
             <Pressable
-              style={[styles.streamBtn, showAll ? styles.streamBtnPaused : null]}
+              style={[styles.btnSecondary, showAll ? styles.btnSecondaryActive : null]}
               onPress={() => {
                 setShowAll((prev) => !prev);
                 if (!showAll) {
@@ -62,31 +141,47 @@ export function LogArea({ entries }: Props) {
                 }
               }}
             >
-              <Text style={styles.streamBtnText}>{showAll ? 'Doar 50' : 'Încarcă toate'}</Text>
+              <Text style={styles.btnSecondaryText}>{showAll ? 'Doar 50' : 'Toate'}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.btnSecondary}
+              onPress={() => {
+                if (isStreamingView) {
+                  setClearCursor(serialEntries.length);
+                } else {
+                  setFrozenEntries([]);
+                }
+                setRenderLimit(PAGE_SIZE);
+                scrollRef.current?.scrollTo({ y: 0, animated: true });
+              }}
+            >
+              <Text style={styles.btnSecondaryText}>Sterge</Text>
             </Pressable>
           </View>
           <View style={styles.controlsRow}>
-          <Pressable
-            style={[styles.streamBtn, !isStreamingView ? styles.streamBtnPaused : null]}
-            onPress={() => {
-              if (isStreamingView) {
-                setFrozenEntries(serialEntries);
-                setIsStreamingView(false);
-              } else {
-                setIsStreamingView(true);
-                setRenderLimit(PAGE_SIZE);
-              }
-            }}
-          >
-            <Text style={styles.streamBtnText}>{isStreamingView ? 'Stop' : 'Start'}</Text>
-          </Pressable>
-          <Text style={styles.autoScrollLabel}>Auto-scroll</Text>
-          <Switch
-            value={autoScroll}
-            onValueChange={setAutoScroll}
-            thumbColor={autoScroll ? '#FFFFFF' : '#D1D5DB'}
-            trackColor={{ false: '#CBD5E1', true: '#93C5FD' }}
-          />
+            <Pressable
+              style={[styles.btnPrimary, !isStreamingView ? styles.btnPrimaryPaused : null]}
+              onPress={() => {
+                if (isStreamingView) {
+                  setFrozenEntries(serialEntries.slice(clearCursor));
+                  setIsStreamingView(false);
+                } else {
+                  setIsStreamingView(true);
+                  setRenderLimit(PAGE_SIZE);
+                }
+              }}
+            >
+              <Text style={styles.btnPrimaryText}>{isStreamingView ? 'Pauza flux' : 'Reia flux'}</Text>
+            </Pressable>
+            <View style={styles.autoScrollWrap}>
+              <Text style={styles.autoScrollLabel}>Auto-scroll</Text>
+              <Switch
+                value={autoScroll}
+                onValueChange={setAutoScroll}
+                thumbColor={autoScroll ? '#FFFFFF' : '#D1D5DB'}
+                trackColor={{ false: '#374151', true: '#2563EB' }}
+              />
+            </View>
           </View>
         </View>
       </View>
@@ -127,9 +222,24 @@ export function LogArea({ entries }: Props) {
 
               {entry.rawText ? <Text style={[styles.rawLine, styles.rawLineHistory]}>{entry.rawText}</Text> : null}
 
-              {!entry.rawText ? <Text style={styles.rawLine}>GPIO    {gpioLine || '--'}</Text> : null}
-              {!entry.rawText && pcfEntries.length ? <Text style={styles.rawLine}>PCF8591 {pcfLine}</Text> : null}
-              {!entry.rawText && inaEntries.length ? <Text style={styles.rawLine}>INA219  {inaLine}</Text> : null}
+              {!entry.rawText ? (
+                <View style={styles.signalRow}>
+                  <Text style={styles.signalPrefix}>GPIO</Text>
+                  <Text style={styles.rawLine}>{renderKvTokens(gpioLine || '--')}</Text>
+                </View>
+              ) : null}
+              {!entry.rawText && pcfEntries.length ? (
+                <View style={styles.signalRow}>
+                  <Text style={styles.signalPrefix}>PCF8591</Text>
+                  <Text style={styles.rawLine}>{renderKvTokens(pcfLine)}</Text>
+                </View>
+              ) : null}
+              {!entry.rawText && inaEntries.length ? (
+                <View style={styles.signalRow}>
+                  <Text style={styles.signalPrefix}>INA219</Text>
+                  <Text style={styles.rawLine}>{renderKvTokens(inaLine)}</Text>
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -142,11 +252,22 @@ export function LogArea({ entries }: Props) {
 
 const styles = StyleSheet.create({
   shell: {
-    backgroundColor: '#070E14',
-    borderRadius: 14,
+    backgroundColor: '#0A0F1B',
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#1C3E56',
-    padding: 10
+    borderColor: '#1E293B',
+    borderLeftWidth: 3,
+    borderLeftColor: '#334155',
+    padding: 10,
+    ...theme.shadow.card
+  },
+  headerLeft: {
+    gap: 2
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
   serialHeader: {
     flexDirection: 'row',
@@ -154,22 +275,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
-    paddingBottom: 8,
+    paddingBottom: 10,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#16384D'
+    borderBottomColor: '#1E293B'
   },
   serialTitle: {
-    color: '#7DD3FC',
+    color: '#E2E8F0',
     fontSize: 14,
-    letterSpacing: 0.5,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'
+    letterSpacing: 0.4,
+    fontFamily: 'JetBrainsMono_500Medium'
   },
   serialMeta: {
     marginTop: 2,
     color: '#38BDF8',
     fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'
+    fontFamily: 'JetBrainsMono_400Regular'
+  },
+  liveRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#22C55E'
+  },
+  liveText: {
+    color: '#86EFAC',
+    fontSize: 11,
+    fontFamily: 'JetBrainsMono_500Medium'
   },
   controlsWrap: {
     alignItems: 'flex-end',
@@ -181,41 +319,79 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8
   },
-  streamBtn: {
-    backgroundColor: '#0C1A24',
-    borderColor: '#16384D',
+  btnSecondary: {
+    backgroundColor: '#111827',
+    borderColor: '#334155',
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6
+    borderRadius: 10,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    justifyContent: 'center'
   },
-  streamBtnPaused: {
-    backgroundColor: '#1F2937',
-    borderColor: '#374151'
+  btnSecondaryActive: {
+    backgroundColor: '#1E293B',
+    borderColor: '#64748B'
   },
-  streamBtnText: {
+  btnSecondaryText: {
     color: '#F8FAFC',
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'
+    fontSize: 13,
+    fontFamily: theme.font.semiBold
+  },
+  btnPrimary: {
+    backgroundColor: '#1D4ED8',
+    borderColor: '#1E40AF',
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    justifyContent: 'center'
+  },
+  btnPrimaryPaused: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155'
+  },
+  btnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: theme.font.semiBold
+  },
+  autoScrollWrap: {
+    minHeight: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
   },
   autoScrollLabel: {
-    color: '#94A3B8',
-    fontSize: 12,
+    color: '#CBD5E1',
+    fontSize: 13,
     fontFamily: theme.font.medium
   },
   wrap: {
+    marginTop: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#030712',
     minHeight: 280,
     maxHeight: 420
   },
   content: {
-    gap: 6
+    gap: 8,
+    padding: 8
   },
   entryCard: {
-    backgroundColor: '#0A1118',
+    backgroundColor: '#0B1220',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#173246',
-    paddingVertical: 8,
+    borderColor: '#1E293B',
+    paddingVertical: 7,
     paddingHorizontal: 10
   },
   entryHead: {
@@ -225,27 +401,57 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   ts: {
-    color: '#22D3EE',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
+    color: '#67E8F9',
+    fontFamily: 'JetBrainsMono_500Medium',
+    fontSize: 11,
     letterSpacing: 0.2
   },
   tsHistory: {
     color: '#A78BFA'
   },
   rawLine: {
-    color: '#86EFAC',
-    fontSize: 12,
-    lineHeight: 18,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'
+    color: '#A7F3D0',
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: 'JetBrainsMono_400Regular'
   },
   rawLineHistory: {
     color: '#E2E8F0'
   },
+  signalRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start'
+  },
+  signalPrefix: {
+    width: 52,
+    color: '#94A3B8',
+    fontSize: 10,
+    fontFamily: 'JetBrainsMono_500Medium'
+  },
+  kvKey: {
+    color: '#93C5FD',
+    fontFamily: 'JetBrainsMono_400Regular'
+  },
+  kvValue: {
+    fontFamily: 'JetBrainsMono_500Medium'
+  },
+  kvOn: {
+    color: '#34D399'
+  },
+  kvOff: {
+    color: '#F87171'
+  },
+  kvNeutral: {
+    color: '#E2E8F0',
+    fontFamily: 'JetBrainsMono_400Regular'
+  },
   empty: {
     color: '#94A3B8',
     fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    paddingVertical: 10
+    fontFamily: 'JetBrainsMono_400Regular',
+    paddingVertical: 10,
+    textAlign: 'center'
   }
 });

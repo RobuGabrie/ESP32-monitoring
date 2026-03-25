@@ -8,7 +8,7 @@ interface Props {
   onChange: (value: TimeRangeKey) => void;
 }
 
-const OPTIONS: Array<{ key: TimeRangeKey; label: string }> = [
+const OPTIONS: { key: TimeRangeKey; label: string }[] = [
   { key: '15m', label: '15m' },
   { key: '1h', label: '1h' },
   { key: '6h', label: '6h' },
@@ -44,28 +44,29 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md
   },
   label: {
-    fontSize: 12,
+    ...theme.type.cardLabel,
     color: theme.colors.muted,
-    fontFamily: theme.font.medium,
     marginBottom: 8
   },
   row: {
-    gap: 8,
+    gap: 10,
     paddingRight: 8
   },
   chip: {
     borderRadius: 999,
+    minHeight: theme.touch.minTarget,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 11,
+    justifyContent: 'center',
     borderWidth: 1
   },
   chipIdle: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#D9E2EC'
+    borderColor: '#BFCBDA'
   },
   chipActive: {
     backgroundColor: '#DBEAFE',
-    borderColor: '#60A5FA'
+    borderColor: '#3B82F6'
   },
   chipText: {
     fontSize: 12,

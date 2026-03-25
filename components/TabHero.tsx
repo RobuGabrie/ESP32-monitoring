@@ -50,9 +50,10 @@ export function TabHero({ title, subtitle, statusLabel, statusTone = 'neutral', 
       {meta.length ? (
         <View style={styles.metaWrap}>
           {meta.map((item) => (
-            <Text key={`${item.label}:${item.value}`} style={styles.metaText}>
-              {item.label}: {item.value}
-            </Text>
+            <View key={`${item.label}:${item.value}`} style={styles.metaChip}>
+              <Text style={styles.metaLabel}>{item.label}</Text>
+              <Text style={styles.metaValue}>{item.value}</Text>
+            </View>
           ))}
         </View>
       ) : null}
@@ -95,10 +96,25 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10
   },
-  metaText: {
-    color: '#4B5563',
+  metaChip: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    minWidth: 108
+  },
+  metaLabel: {
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
-    fontSize: 12
+    fontSize: 11
+  },
+  metaValue: {
+    marginTop: 2,
+    color: theme.colors.text,
+    fontFamily: theme.font.semiBold,
+    fontSize: 13
   },
   footerWrap: {
     marginTop: 10

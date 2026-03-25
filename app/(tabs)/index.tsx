@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
+import { Ionicons } from '@expo/vector-icons';
 
 import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
@@ -13,7 +14,7 @@ import { useESP32 } from '@/hooks/useESP32';
 import { ModuleName } from '@/hooks/useStore';
 
 type DashboardCard = {
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   cmd: ModuleName;
   source: string;
@@ -23,30 +24,38 @@ type DashboardCard = {
   detailLabel: (v: number) => string;
 };
 
+type SummaryCard = {
+  key: string;
+  label: string;
+  value: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  accent: string;
+};
+
 const cardMeta = {
   temperature: {
-    icon: '🌡️',
+    icon: 'thermometer',
     title: 'Temperatură',
     source: 'Termistor',
     color: '#2563EB',
     detailLabel: (v: number) => `${v.toFixed(1)} °C`
   },
   light: {
-    icon: '☀️',
+    icon: 'sunny',
     title: 'Luminozitate',
     source: 'LDR',
     color: '#F59E0B',
     detailLabel: (v: number) => `${v.toFixed(1)} %`
   },
   cpu: {
-    icon: '⚙️',
+    icon: 'cog',
     title: 'Încărcare CPU',
     source: 'ESP32-C3 SuperMini',
     color: '#10B981',
     detailLabel: (v: number) => `${v.toFixed(1)} %`
   },
   current: {
-    icon: '🔌',
+    icon: 'flash',
     title: 'Curent',
     source: 'INA219',
     color: '#EF4444',
@@ -163,7 +172,7 @@ export default function OverviewScreen() {
         detailLabel: cardMeta.current.detailLabel
       }
     ],
-    [data, history, lightPercent, lightRaw]
+    [data, history, lightPercent]
   );
 
   const environmentCards = cards.slice(0, 2);
@@ -175,18 +184,42 @@ export default function OverviewScreen() {
       ? data.timestamp
       : '--';
 
-  const summaryCards = useMemo(
+  const summaryCards = useMemo<SummaryCard[]>(
     () => [
-      { key: 'status', label: 'Conexiune', value: status === 'offline' ? 'Offline' : 'Conectat' },
-      { key: 'uptime', label: 'Timp activ', value: `${Math.round(data?.uptime ?? 0)} s` },
-      { key: 'power', label: 'Putere', value: `${(data?.powerMw ?? 0).toFixed(1)} mW` },
-      { key: 'battery', label: 'Baterie', value: `${Math.round(data?.batteryPercent ?? 0)}%` }
+      {
+        key: 'status',
+        label: 'Conexiune',
+        value: status === 'offline' ? 'Offline' : 'Conectat',
+        icon: status === 'offline' ? 'cloud-offline' : 'cloud-done',
+        accent: status === 'offline' ? '#FEE2E2' : '#DCFCE7'
+      },
+      {
+        key: 'uptime',
+        label: 'Timp activ',
+        value: `${Math.round(data?.uptime ?? 0)} s`,
+        icon: 'time',
+        accent: '#DBEAFE'
+      },
+      {
+        key: 'power',
+        label: 'Putere',
+        value: `${(data?.powerMw ?? 0).toFixed(1)} mW`,
+        icon: 'flash',
+        accent: '#FEF3C7'
+      },
+      {
+        key: 'battery',
+        label: 'Baterie',
+        value: `${Math.round(data?.batteryPercent ?? 0)}%`,
+        icon: 'battery-half',
+        accent: '#E2E8F0'
+      }
     ],
     [data?.batteryPercent, data?.powerMw, data?.uptime, status]
   );
 
   const selectedCard = useMemo(() => cards.find((c) => c.cmd === selectedCmd) ?? null, [cards, selectedCmd]);
-  const selectedSeries = selectedCard?.history.slice(-5000) ?? [];
+  const selectedSeries = useMemo(() => selectedCard?.history.slice(-5000) ?? [], [selectedCard]);
   const detailStats = useMemo(() => {
     if (!selectedSeries.length) {
       return { min: 0, max: 0, avg: 0, points: 0 };
@@ -253,7 +286,12 @@ export default function OverviewScreen() {
         <View style={styles.summaryGrid}>
           {summaryCards.map((item) => (
             <View key={item.key} style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>{item.label}</Text>
+              <View style={styles.summaryHeader}>
+                <View style={[styles.summaryIconWrap, { backgroundColor: item.accent }]}>
+                  <Ionicons name={item.icon} size={13} color="#1E3A8A" />
+                </View>
+                <Text style={styles.summaryLabel}>{item.label}</Text>
+              </View>
               <Text style={styles.summaryValue}>{item.value}</Text>
             </View>
           ))}
@@ -306,7 +344,10 @@ export default function OverviewScreen() {
               <>
                 <View style={styles.modalHeader}>
                   <View>
-                    <Text style={styles.modalTitle}>{selectedCard.icon} {selectedCard.title}</Text>
+                    <View style={styles.modalTitleRow}>
+                      <Ionicons name={selectedCard.icon} size={18} color="#1D4ED8" />
+                      <Text style={styles.modalTitle}>{selectedCard.title}</Text>
+                    </View>
                     <Text style={styles.modalSubtitle}>Detaliu extins cu scala 0 - {selectedCard.detailLabel(modalScaleMax)}</Text>
                   </View>
                   <Pressable style={styles.closeButton} onPress={() => setSelectedCmd(null)}>
@@ -368,22 +409,33 @@ const styles = StyleSheet.create({
     flexBasis: '48%',
     minWidth: 150,
     backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 14,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: '#E5EAF1',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 12
   },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  summaryIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   summaryLabel: {
-    color: '#64748B',
-    fontFamily: theme.font.medium,
-    fontSize: 12
+    color: theme.colors.textSoft,
+    ...theme.type.cardLabel
   },
   summaryValue: {
-    marginTop: 4,
+    marginTop: 6,
     color: theme.colors.text,
-    fontFamily: theme.font.bold,
-    fontSize: 18
+    ...theme.type.cardValue,
+    lineHeight: 30
   },
   healthRow: {
     marginTop: 10,
@@ -412,7 +464,7 @@ const styles = StyleSheet.create({
   healthText: {
     color: '#334155',
     fontFamily: theme.font.medium,
-    fontSize: 12
+    fontSize: 13
   },
   cardRow: {
     flexDirection: 'row',
@@ -446,6 +498,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.font.bold,
     fontSize: 19
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
   modalSubtitle: {
     marginTop: 2,

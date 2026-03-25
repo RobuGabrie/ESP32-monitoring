@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Defs, Line, LinearGradient, Path, Stop, Svg } from 'react-native-svg';
+import { Circle, Defs, Line, LinearGradient, Path, Stop, Svg } from 'react-native-svg';
 import { format as formatDate } from 'date-fns';
 
 import { theme } from '@/constants/theme';
@@ -16,6 +16,9 @@ interface Props {
   yTickCount?: number;
   includeZero?: boolean;
   xValues?: number[];
+  showLegend?: boolean;
+  showEventMarker?: boolean;
+  eventDeltaThreshold?: number;
 }
 
 const smoothSeries = (input: number[], alpha = 0.3) => {
@@ -30,7 +33,7 @@ const smoothSeries = (input: number[], alpha = 0.3) => {
   return out;
 };
 
-const buildSmoothPath = (points: Array<{ x: number; y: number }>) => {
+const buildSmoothPath = (points: { x: number; y: number }[]) => {
   if (!points.length) {
     return '';
   }
@@ -82,7 +85,10 @@ export function FullChart({
   maxValue,
   yTickCount = 6,
   includeZero = true,
-  xValues
+  xValues,
+  showLegend = false,
+  showEventMarker = false,
+  eventDeltaThreshold
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const values = useMemo(() => {
@@ -107,7 +113,8 @@ export function FullChart({
     return smoothSeries(sanitized);
   }, [data]);
 
-  const safeTickCount = Math.max(4, yTickCount);
+  const chartHeight = Math.max(height - 70, 120);
+  const safeTickCount = Math.max(4, chartHeight < 155 ? yTickCount - 1 : yTickCount);
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
 
@@ -128,10 +135,14 @@ export function FullChart({
   const min = Math.floor(preMin / step) * step;
   const max = Math.ceil(preMax / step) * step;
   const range = Math.max(max - min, step);
+  const yLabelWidth = useMemo(() => {
+    const samples = [label(min), label(max), label(min + range / 2)];
+    const longest = samples.reduce((acc, item) => Math.max(acc, item.length), 0);
+    return Math.min(72, Math.max(42, Math.ceil(longest * 5.2) + 8));
+  }, [label, max, min, range]);
 
   const chartWidth = Math.max(windowWidth - 32 - 24, 220);
-  const chartHeight = Math.max(height - 70, 120);
-  const leftPad = 42;
+  const leftPad = yLabelWidth;
   const rightPad = 10;
   const topPad = 8;
   const bottomPad = 26;
@@ -140,7 +151,7 @@ export function FullChart({
   const chartAnim = useRef(new Animated.Value(0)).current;
   const animatedOnce = useRef(false);
 
-  const { linePath, areaPath } = useMemo(() => {
+  const { linePath, areaPath, lastPoint, latestValue } = useMemo(() => {
     const points = values
       .map((v, i) => {
         const x = leftPad + (i / Math.max(values.length - 1, 1)) * innerW;
@@ -150,13 +161,13 @@ export function FullChart({
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
 
     if (!points.length) {
-      return { linePath: '', areaPath: '' };
+      return { linePath: '', areaPath: '', lastPoint: null, latestValue: 0 };
     }
 
     const line = buildSmoothPath(points);
     const area = `${line} L ${points[points.length - 1].x} ${topPad + innerH} L ${points[0].x} ${topPad + innerH} Z`;
 
-    return { linePath: line, areaPath: area };
+    return { linePath: line, areaPath: area, lastPoint: points[points.length - 1], latestValue: values[values.length - 1] ?? 0 };
   }, [innerH, innerW, leftPad, min, range, topPad, values]);
 
   useEffect(() => {
@@ -226,9 +237,46 @@ export function FullChart({
     });
   }, [innerW, leftPad, values.length, xValues]);
 
+  const chartStats = useMemo(() => {
+    if (!values.length) {
+      return null;
+    }
+
+    return {
+      minV: Math.min(...values),
+      maxV: Math.max(...values)
+    };
+  }, [values]);
+
+  const eventMarker = useMemo(() => {
+    if (!showEventMarker || !lastPoint || values.length < 2) {
+      return null;
+    }
+
+    const prev = values[values.length - 2] ?? latestValue;
+    const delta = latestValue - prev;
+    const threshold = typeof eventDeltaThreshold === 'number' ? eventDeltaThreshold : Math.max(range * 0.18, 1);
+
+    if (Math.abs(delta) < threshold) {
+      return null;
+    }
+
+    return {
+      delta,
+      label: delta < 0 ? 'Scadere brusca' : 'Crestere brusca'
+    };
+  }, [eventDeltaThreshold, lastPoint, latestValue, range, showEventMarker, values]);
+
   return (
     <View style={[styles.card, { height }]}> 
       {title ? <Text style={styles.title}>{title}</Text> : null}
+      {showLegend && chartStats ? (
+        <View style={styles.legendRow}>
+          <Text style={styles.legendText}>Min: {label(chartStats.minV)}</Text>
+          <Text style={styles.legendText}>Max: {label(chartStats.maxV)}</Text>
+          <Text style={styles.legendText}>Acum: {label(latestValue)}</Text>
+        </View>
+      ) : null}
       <Animated.View
         style={[
           styles.chartWrap,
@@ -248,8 +296,8 @@ export function FullChart({
         <Svg width={chartWidth} height={chartHeight}>
           <Defs>
             <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={color} stopOpacity="0.22" />
-              <Stop offset="100%" stopColor={color} stopOpacity="0.035" />
+              <Stop offset="0%" stopColor={color} stopOpacity={theme.chart.fillOpacity.start} />
+              <Stop offset="100%" stopColor={color} stopOpacity={theme.chart.fillOpacity.end} />
             </LinearGradient>
           </Defs>
 
@@ -287,18 +335,67 @@ export function FullChart({
               d={linePath}
               fill="none"
               stroke={color}
-              strokeWidth={2.7}
+              strokeWidth={theme.chart.strokeWidth.normal}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           ) : null}
+          {eventMarker && lastPoint ? (
+            <Line
+              x1={lastPoint.x}
+              y1={topPad}
+              x2={lastPoint.x}
+              y2={topPad + innerH}
+              stroke={eventMarker.delta < 0 ? theme.colors.warning : theme.colors.info}
+              strokeDasharray="3 4"
+              strokeOpacity={0.8}
+              strokeWidth={1.1}
+            />
+          ) : null}
+          {lastPoint ? (
+            <>
+              <Circle cx={lastPoint.x} cy={lastPoint.y} r={5.5} fill={color} opacity={0.18} />
+              <Circle cx={lastPoint.x} cy={lastPoint.y} r={3.2} fill={color} />
+            </>
+          ) : null}
         </Svg>
+
+        {lastPoint ? (
+          <View
+            style={[
+              styles.valuePill,
+              {
+                left: Math.max(leftPad + 6, Math.min(lastPoint.x + 8, chartWidth - 92)),
+                top: Math.max(topPad + 2, lastPoint.y - 16)
+              }
+            ]}
+          >
+            <Text style={styles.valuePillText}>{label(latestValue)}</Text>
+          </View>
+        ) : null}
+
+        {eventMarker && lastPoint ? (
+          <View
+            style={[
+              styles.eventPill,
+              {
+                left: Math.max(leftPad + 4, Math.min(lastPoint.x - 58, chartWidth - 128)),
+                top: Math.max(topPad + 2, lastPoint.y + 8),
+                backgroundColor: eventMarker.delta < 0 ? '#FEF3C7' : '#E0F2FE'
+              }
+            ]}
+          >
+            <Text style={[styles.eventPillText, { color: eventMarker.delta < 0 ? '#92400E' : '#0C4A6E' }]}>{eventMarker.label}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.yLabels} pointerEvents="none">
           {yTicks.map((tick, idx) => (
-            <Text key={`tick-${idx}`} style={[styles.tick, { top: yLines[idx] - 8 }]}>
-              {label(tick)}
-            </Text>
+            idx % (chartHeight < 155 ? 2 : 1) === 0 ? (
+              <Text key={`tick-${idx}`} style={[styles.tick, { top: yLines[idx] - (chartHeight < 155 ? 6 : 8), fontSize: chartHeight < 155 ? 9 : 10 }]}>
+                {label(tick)}
+              </Text>
+            ) : null
           ))}
         </View>
 
@@ -338,12 +435,52 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 8
   },
+  legendRow: {
+    marginTop: 8,
+    marginBottom: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  legendText: {
+    fontSize: 10,
+    color: theme.colors.textSoft,
+    fontFamily: theme.font.medium
+  },
+  valuePill: {
+    position: 'absolute',
+    backgroundColor: '#0F172A',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 4
+  },
+  valuePillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: theme.font.semiBold
+  },
+  eventPill: {
+    position: 'absolute',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#FDE68A'
+  },
+  eventPillText: {
+    fontSize: 10,
+    fontFamily: theme.font.semiBold
+  },
   yLabels: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    width: 40
+    width: 72
   },
   tick: {
     position: 'absolute',
