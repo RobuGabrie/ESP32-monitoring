@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     fontFamily: 'JetBrainsMono_500Medium'
   },
   controlsWrap: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 6,
     width: '100%',
     marginTop: 4
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     gap: 8,
     width: '100%',
     flexWrap: 'wrap'
@@ -348,13 +348,16 @@ const styles = StyleSheet.create({
   },
   autoScrollWrap: {
     minHeight: 48,
+    minWidth: 170,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#334155',
     backgroundColor: '#111827',
     paddingHorizontal: 10,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8
   },
   autoScrollLabel: {
