@@ -32,6 +32,7 @@ export interface ModuleStates {
   light: boolean;
   cpu: boolean;
   current: boolean;
+  cpuStress: boolean;
 }
 
 export interface IOLogEntry {
@@ -94,7 +95,8 @@ const baseData = (): StoreData => ({
     temperature: true,
     light: true,
     cpu: true,
-    current: true
+    current: true,
+    cpuStress: false
   },
   connectionStatus: 'offline',
   selectedRange: '1h',

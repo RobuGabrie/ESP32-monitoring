@@ -236,11 +236,14 @@ const normalizeStatePayload = (payload: unknown) => {
   }
 
   const rec = payload as Record<string, unknown>;
-  const next: Partial<Record<ModuleName, boolean>> = {};
+  const next: Partial<ReturnType<typeof getStoreState>['moduleStates']> = {};
 
   const moduleName = rec.module;
   if (isModuleName(moduleName) && typeof rec.enabled === 'boolean') {
     next[moduleName] = rec.enabled;
+  }
+  if (moduleName === 'cpu_stress' && typeof rec.enabled === 'boolean') {
+    next.cpuStress = rec.enabled;
   }
 
   const modules = rec.modules;
@@ -251,6 +254,9 @@ const normalizeStatePayload = (payload: unknown) => {
         next[key] = m[key] as boolean;
       }
     });
+    if (typeof m.cpu_stress === 'boolean') {
+      next.cpuStress = m.cpu_stress;
+    }
   }
 
   return Object.keys(next).length ? next : null;
@@ -670,6 +676,7 @@ const ensureSharedConnection = () => {
 export const useESP32 = () => {
   const clientRef = useRef<MqttClient | null>(null);
   const setModuleState = useStore((s) => s.setModuleState);
+  const setModuleStates = useStore((s) => s.setModuleStates);
   const data = useStore((s) => s.data);
   const tempHistory = useStore((s) => s.tempHistory);
   const lightHistory = useStore((s) => s.lightHistory);
@@ -752,6 +759,17 @@ export const useESP32 = () => {
     [publishCommand, setModuleState]
   );
 
+  const sendCpuStressCommand = useCallback(
+    (enabled: boolean) => {
+      const published = publishCommand({ module: 'cpu_stress', enabled });
+      if (published) {
+        setModuleStates({ cpuStress: enabled });
+      }
+      return published;
+    },
+    [publishCommand, setModuleStates]
+  );
+
   return {
     data,
     history,
@@ -763,6 +781,7 @@ export const useESP32 = () => {
     peakCurrent,
     moduleStates,
     publishCommand,
-    sendModuleCommand
+    sendModuleCommand,
+    sendCpuStressCommand
   };
 };

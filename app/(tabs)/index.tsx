@@ -69,7 +69,7 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 };
 
 export default function OverviewScreen() {
-  const { data, history, status, ioLog, moduleStates, sendModuleCommand, selectedRange, setTimeRange } = useESP32();
+  const { data, history, status, ioLog, moduleStates, sendModuleCommand, sendCpuStressCommand, selectedRange, setTimeRange } = useESP32();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [selectedCmd, setSelectedCmd] = useState<ModuleName | null>(null);
 
@@ -330,6 +330,30 @@ export default function OverviewScreen() {
             </View>
           ))}
         </View>
+
+        <View style={styles.cpuStressCard}>
+          <View style={styles.cpuStressHead}>
+            <View style={styles.cpuStressTitleRow}>
+              <Ionicons name="hardware-chip-outline" size={16} color="#0F172A" />
+              <Text style={styles.cpuStressTitle}>CPU Stress Test</Text>
+            </View>
+            <View style={[styles.cpuStressBadge, moduleStates.cpuStress ? styles.cpuStressBadgeOn : styles.cpuStressBadgeOff]}>
+              <Text style={[styles.cpuStressBadgeText, moduleStates.cpuStress ? styles.cpuStressBadgeTextOn : styles.cpuStressBadgeTextOff]}>
+                {moduleStates.cpuStress ? 'ACTIV' : 'OPRIT'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.cpuStressHint}>Pornește testul și urmărește cardul CPU: încărcarea trebuie să urce vizibil dacă măsurarea este corectă.</Text>
+          <Pressable
+            style={[styles.cpuStressButton, moduleStates.cpuStress ? styles.cpuStressButtonOn : styles.cpuStressButtonOff]}
+            onPress={() => {
+              sendCpuStressCommand(!moduleStates.cpuStress);
+            }}
+          >
+            <Ionicons name={moduleStates.cpuStress ? 'pause-circle-outline' : 'play-circle-outline'} size={16} color="#FFFFFF" />
+            <Text style={styles.cpuStressButtonText}>{moduleStates.cpuStress ? 'Opreste CPU Stress' : 'Porneste CPU Stress'}</Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       <Modal visible={!!selectedCard} transparent animationType="fade" onRequestClose={() => setSelectedCmd(null)}>
@@ -472,6 +496,86 @@ const styles = StyleSheet.create({
     alignItems: 'stretch'
   },
   cardWrap: { flex: 1 },
+  cpuStressCard: {
+    marginTop: 10,
+    marginBottom: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center'
+  },
+  cpuStressHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  cpuStressTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  cpuStressTitle: {
+    color: '#0F172A',
+    fontFamily: theme.font.semiBold,
+    fontSize: 14
+  },
+  cpuStressBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3
+  },
+  cpuStressBadgeOn: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC'
+  },
+  cpuStressBadgeOff: {
+    backgroundColor: '#E2E8F0',
+    borderColor: '#CBD5E1'
+  },
+  cpuStressBadgeText: {
+    fontFamily: theme.font.semiBold,
+    fontSize: 11
+  },
+  cpuStressBadgeTextOn: {
+    color: '#166534'
+  },
+  cpuStressBadgeTextOff: {
+    color: '#334155'
+  },
+  cpuStressHint: {
+    marginTop: 8,
+    color: '#475569',
+    fontFamily: theme.font.regular,
+    fontSize: 12
+  },
+  cpuStressButton: {
+    marginTop: 10,
+    borderRadius: 10,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8
+  },
+  cpuStressButtonOn: {
+    backgroundColor: '#B91C1C'
+  },
+  cpuStressButtonOff: {
+    backgroundColor: '#334155'
+  },
+  cpuStressButtonText: {
+    color: '#FFFFFF',
+    fontFamily: theme.font.semiBold,
+    fontSize: 13
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
