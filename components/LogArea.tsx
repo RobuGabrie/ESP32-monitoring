@@ -45,7 +45,6 @@ export function LogArea({ entries }: Props) {
   const prevCountRef = useRef(0);
   const [autoScroll, setAutoScroll] = useState(true);
   const [renderLimit, setRenderLimit] = useState(PAGE_SIZE);
-  const [showAll, setShowAll] = useState(false);
   const [isStreamingView, setIsStreamingView] = useState(true);
   const [msgRate, setMsgRate] = useState(0);
   const [clearCursor, setClearCursor] = useState(0);
@@ -63,7 +62,7 @@ export function LogArea({ entries }: Props) {
   const displaySource = isStreamingView ? serialEntries.slice(clearCursor) : frozenEntries;
 
   const ordered = useMemo(() => [...displaySource].reverse(), [displaySource]);
-  const visibleEntries = showAll ? ordered : ordered.slice(0, renderLimit);
+  const visibleEntries = ordered.slice(0, renderLimit);
 
   useEffect(() => {
     if (!autoScroll) {
@@ -130,18 +129,18 @@ export function LogArea({ entries }: Props) {
         <View style={styles.controlsWrap}>
           <View style={styles.controlsRow}>
             <Pressable
-              style={[styles.btnSecondary, showAll ? styles.btnSecondaryActive : null]}
+              style={[styles.btnPrimary, !isStreamingView ? styles.btnPrimaryPaused : null]}
               onPress={() => {
-                setShowAll((prev) => !prev);
-                if (!showAll) {
-                  setRenderLimit(ordered.length || PAGE_SIZE);
+                if (isStreamingView) {
+                  setFrozenEntries(serialEntries.slice(clearCursor));
+                  setIsStreamingView(false);
                 } else {
+                  setIsStreamingView(true);
                   setRenderLimit(PAGE_SIZE);
-                  scrollRef.current?.scrollTo({ y: 0, animated: true });
                 }
               }}
             >
-              <Text style={styles.btnSecondaryText}>{showAll ? 'Doar 50' : 'Toate'}</Text>
+              <Text style={styles.btnPrimaryText}>{isStreamingView ? 'Pauza flux' : 'Reia flux'}</Text>
             </Pressable>
             <Pressable
               style={styles.btnSecondary}
@@ -159,20 +158,6 @@ export function LogArea({ entries }: Props) {
             </Pressable>
           </View>
           <View style={styles.controlsRow}>
-            <Pressable
-              style={[styles.btnPrimary, !isStreamingView ? styles.btnPrimaryPaused : null]}
-              onPress={() => {
-                if (isStreamingView) {
-                  setFrozenEntries(serialEntries.slice(clearCursor));
-                  setIsStreamingView(false);
-                } else {
-                  setIsStreamingView(true);
-                  setRenderLimit(PAGE_SIZE);
-                }
-              }}
-            >
-              <Text style={styles.btnPrimaryText}>{isStreamingView ? 'Pauza flux' : 'Reia flux'}</Text>
-            </Pressable>
             <View style={styles.autoScrollWrap}>
               <Text style={styles.autoScrollLabel}>Auto-scroll</Text>
               <Switch
@@ -194,8 +179,6 @@ export function LogArea({ entries }: Props) {
         onScroll={({ nativeEvent }) => {
           const nearBottom = nativeEvent.layoutMeasurement.height + nativeEvent.contentOffset.y >= nativeEvent.contentSize.height - 80;
           if (!nearBottom) return;
-
-          if (showAll) return;
 
           setRenderLimit((prev) => {
             if (prev >= ordered.length) return prev;
@@ -316,14 +299,18 @@ const styles = StyleSheet.create({
     fontFamily: 'JetBrainsMono_500Medium'
   },
   controlsWrap: {
-    alignItems: 'flex-end',
-    marginLeft: 'auto',
-    gap: 6
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
+    marginTop: 4
   },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    flexWrap: 'wrap'
   },
   btnSecondary: {
     backgroundColor: '#111827',
@@ -334,10 +321,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     justifyContent: 'center'
-  },
-  btnSecondaryActive: {
-    backgroundColor: '#1E293B',
-    borderColor: '#64748B'
   },
   btnSecondaryText: {
     color: '#F8FAFC',

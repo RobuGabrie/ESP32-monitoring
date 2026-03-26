@@ -71,8 +71,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E8ECF2',
-    borderLeftWidth: 3,
-    borderLeftColor: '#BFDBFE'
+    borderLeftWidth: 1,
+    borderLeftColor: '#E8ECF2'
   },
   topRow: {
     flexDirection: 'row',
