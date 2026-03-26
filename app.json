@@ -22,7 +22,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F1F3F5"
-      }
+      },
+      "package": "com.gabrielrobu.esp32"
     },
     "experiments": {
       "typedRoutes": true
@@ -33,6 +34,12 @@
         "projectId": "5e95bd49-0790-4ea2-a834-e10a4486bf04"
       }
     },
-    "owner": "gabrielrobu"
+    "owner": "gabrielrobu",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5e95bd49-0790-4ea2-a834-e10a4486bf04"
+    }
   }
 }

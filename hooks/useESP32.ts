@@ -53,11 +53,29 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 const toEpochMs = (value: unknown, fallback = Date.now()) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value > 1_000_000_000_000) {
+      return value;
+    }
+    if (value > 1_000_000_000) {
+      return value * 1000;
+    }
     return value;
   }
 
   if (typeof value === 'string' && value.trim()) {
     const s = value.trim();
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      const raw = Number(s);
+      if (Number.isFinite(raw)) {
+        if (raw > 1_000_000_000_000) {
+          return raw;
+        }
+        if (raw > 1_000_000_000) {
+          return raw * 1000;
+        }
+      }
+    }
+
     const direct = Date.parse(s);
     if (Number.isFinite(direct)) {
       return direct;

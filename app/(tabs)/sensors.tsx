@@ -27,12 +27,12 @@ export default function SensorsScreen() {
 
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Ionicons name="information-circle-outline" size={15} color="#1D4ED8" />
+            <Ionicons name="information-circle-outline" size={15} color="#4B5563" />
             <Text style={styles.infoText}>Valorile de senzori sunt disponibile in Monitor/Putere/Rețea.</Text>
           </View>
           <View style={styles.infoDivider} />
           <View style={styles.infoRow}>
-            <Ionicons name="terminal-outline" size={15} color="#1D4ED8" />
+            <Ionicons name="terminal-outline" size={15} color="#4B5563" />
             <Text style={styles.infoText}>Aici este pastrat doar fluxul brut pentru debug hardware.</Text>
           </View>
         </View>

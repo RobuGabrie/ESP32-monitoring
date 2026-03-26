@@ -118,7 +118,7 @@ export function LogArea({ entries }: Props) {
       <View style={styles.serialHeader}>
         <View style={styles.headerLeft}>
           <View style={styles.titleRow}>
-            <Ionicons name="terminal" size={15} color="#A5B4FC" />
+            <Ionicons name="terminal" size={15} color="#B6C2D3" />
             <Text style={styles.serialTitle}>SERIAL MONITOR</Text>
           </View>
           <Text style={styles.serialMeta}>hardandsoft/esp32/gpio_raw @ 1Hz</Text>
@@ -179,7 +179,7 @@ export function LogArea({ entries }: Props) {
                 value={autoScroll}
                 onValueChange={setAutoScroll}
                 thumbColor={autoScroll ? '#FFFFFF' : '#D1D5DB'}
-                trackColor={{ false: '#374151', true: '#2563EB' }}
+                trackColor={{ false: '#374151', true: '#22C55E' }}
               />
             </View>
           </View>
@@ -225,19 +225,25 @@ export function LogArea({ entries }: Props) {
               {!entry.rawText ? (
                 <View style={styles.signalRow}>
                   <Text style={styles.signalPrefix}>GPIO</Text>
-                  <Text style={styles.rawLine}>{renderKvTokens(gpioLine || '--')}</Text>
+                  <View style={styles.signalValueWrap}>
+                    <Text style={styles.rawLine}>{renderKvTokens(gpioLine || '--')}</Text>
+                  </View>
                 </View>
               ) : null}
               {!entry.rawText && pcfEntries.length ? (
                 <View style={styles.signalRow}>
                   <Text style={styles.signalPrefix}>PCF8591</Text>
-                  <Text style={styles.rawLine}>{renderKvTokens(pcfLine)}</Text>
+                  <View style={styles.signalValueWrap}>
+                    <Text style={styles.rawLine}>{renderKvTokens(pcfLine)}</Text>
+                  </View>
                 </View>
               ) : null}
               {!entry.rawText && inaEntries.length ? (
                 <View style={styles.signalRow}>
                   <Text style={styles.signalPrefix}>INA219</Text>
-                  <Text style={styles.rawLine}>{renderKvTokens(inaLine)}</Text>
+                  <View style={styles.signalValueWrap}>
+                    <Text style={styles.rawLine}>{renderKvTokens(inaLine)}</Text>
+                  </View>
                 </View>
               ) : null}
             </View>
@@ -288,7 +294,7 @@ const styles = StyleSheet.create({
   },
   serialMeta: {
     marginTop: 2,
-    color: '#38BDF8',
+    color: '#9CA3AF',
     fontSize: 11,
     fontFamily: 'JetBrainsMono_400Regular'
   },
@@ -339,8 +345,8 @@ const styles = StyleSheet.create({
     fontFamily: theme.font.semiBold
   },
   btnPrimary: {
-    backgroundColor: '#1D4ED8',
-    borderColor: '#1E40AF',
+    backgroundColor: '#334155',
+    borderColor: '#475569',
     borderWidth: 1,
     borderRadius: 10,
     minHeight: 48,
@@ -392,7 +398,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E293B',
     paddingVertical: 7,
-    paddingHorizontal: 10
+    paddingHorizontal: 10,
+    overflow: 'hidden'
   },
   entryHead: {
     flexDirection: 'row',
@@ -401,19 +408,21 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   ts: {
-    color: '#67E8F9',
+    color: '#A7F3D0',
     fontFamily: 'JetBrainsMono_500Medium',
     fontSize: 11,
     letterSpacing: 0.2
   },
   tsHistory: {
-    color: '#A78BFA'
+    color: '#CBD5E1'
   },
   rawLine: {
     color: '#A7F3D0',
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: 'JetBrainsMono_400Regular'
+    fontFamily: 'JetBrainsMono_400Regular',
+    flexShrink: 1,
+    width: '100%'
   },
   rawLineHistory: {
     color: '#E2E8F0'
@@ -422,16 +431,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'flex-start'
+    alignItems: 'flex-start',
+    width: '100%'
   },
   signalPrefix: {
     width: 52,
+    minWidth: 52,
     color: '#94A3B8',
     fontSize: 10,
     fontFamily: 'JetBrainsMono_500Medium'
   },
+  signalValueWrap: {
+    flex: 1,
+    minWidth: 0
+  },
   kvKey: {
-    color: '#93C5FD',
+    color: '#94A3B8',
     fontFamily: 'JetBrainsMono_400Regular'
   },
   kvValue: {

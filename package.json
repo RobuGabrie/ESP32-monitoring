@@ -26,6 +26,7 @@
     "expo-router": "~6.0.23",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.16",
     "mqtt": "^5.15.1",
     "process": "^0.11.10",
     "react": "19.1.0",

@@ -200,19 +200,41 @@ export function FullChart({
   );
 
   const xTicks = useMemo(() => {
+    const normalizeEpoch = (value: number) => {
+      if (!Number.isFinite(value)) {
+        return Number.NaN;
+      }
+      if (value > 1_000_000_000_000) {
+        return value;
+      }
+      if (value > 1_000_000_000) {
+        return value * 1000;
+      }
+      return Number.NaN;
+    };
+
     const timeline = Array.isArray(xValues) && xValues.length === values.length
       ? xValues
       : Array.from({ length: values.length }, (_, i) => i);
 
-    const realTimes = timeline.filter((v): v is number => Number.isFinite(v) && v > 1_000_000_000_000);
+    const realTimes = timeline
+      .map((v) => normalizeEpoch(v))
+      .filter((v): v is number => Number.isFinite(v));
     const tMin = realTimes.length ? Math.min(...realTimes) : NaN;
     const tMax = realTimes.length ? Math.max(...realTimes) : NaN;
     const hasRealRange = Number.isFinite(tMin) && Number.isFinite(tMax) && tMax >= tMin;
 
     const spanMs = hasRealRange ? Math.abs((tMax as number) - (tMin as number)) : 0;
     const formatX = (v: number) => {
-      if (v > 1_000_000_000_000) {
-        return spanMs > 24 * 60 * 60 * 1000 ? formatDate(v, 'dd/MM HH:mm') : formatDate(v, 'HH:mm');
+      const normalized = normalizeEpoch(v);
+      if (Number.isFinite(normalized)) {
+        if (spanMs > 24 * 60 * 60 * 1000) {
+          return formatDate(normalized, 'dd/MM HH:mm');
+        }
+        if (spanMs > 2 * 60 * 60 * 1000) {
+          return formatDate(normalized, 'HH:mm');
+        }
+        return formatDate(normalized, 'HH:mm:ss');
       }
       return String(v);
     };
@@ -400,11 +422,18 @@ export function FullChart({
         </View>
 
         <View style={[styles.xLabels, { left: leftPad, right: rightPad }]} pointerEvents="none">
-          {xTicks.map((tick) => (
-            <Text key={`x-${tick.idx}`} style={[styles.xTick, { left: tick.x - leftPad - 16 }]}>
+          {xTicks.map((tick, tickIndex) => {
+            const isFirst = tickIndex === 0;
+            const isLast = tickIndex === xTicks.length - 1;
+            const tickWidth = tick.label.length > 7 ? 78 : 48;
+            const offset = isFirst ? 0 : isLast ? tickWidth : tickWidth / 2;
+
+            return (
+              <Text key={`x-${tick.idx}`} style={[styles.xTick, { width: tickWidth, left: tick.x - leftPad - offset }]}>
               {tick.label}
-            </Text>
-          ))}
+              </Text>
+            );
+          })}
         </View>
       </Animated.View>
     </View>
@@ -497,6 +526,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     color: theme.colors.muted,
     fontSize: 10,
-    fontFamily: theme.font.regular
+    fontFamily: theme.font.regular,
+    textAlign: 'center'
   }
 });

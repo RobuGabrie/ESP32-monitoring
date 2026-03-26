@@ -31,7 +31,7 @@ export function DeviceCard({ icon, title, source, value, color, history, enabled
       <View style={styles.topRow}>
         <View style={styles.titleWrap}>
           <View style={styles.iconBadge}>
-            <Ionicons name={icon} size={16} color="#1D4ED8" />
+              <Ionicons name={icon} size={16} color="#3F4A5A" />
           </View>
           <Text style={styles.title}>{title}</Text>
         </View>
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E6EBF2',
     borderLeftWidth: 3,
-    borderLeftColor: theme.accents.primary
+    borderLeftColor: '#D6DEE8'
   },
   cardInteractive: {
     borderColor: '#DCE4F0'
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 999,
-    backgroundColor: '#EAF2FF',
+    backgroundColor: '#EEF2F6',
     alignItems: 'center',
     justifyContent: 'center'
   },
