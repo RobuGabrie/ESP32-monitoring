@@ -10,6 +10,7 @@ export const MQTT_USER = 'emqx';
 export const MQTT_PASS = 'public';
 export const BATTERY_CAPACITY = 2000;
 export const USE_MOCK = false;
+export const USE_SUPABASE_HISTORY = false;
 
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://imdevwnnqmrnmxlwqxzn.supabase.co';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';

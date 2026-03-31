@@ -21,6 +21,13 @@ export interface ESP32Data {
   ip: string;
   mac: string;
   channel: number;
+  // MPU9250 IMU data
+  accelX?: number;
+  accelY?: number;
+  accelZ?: number;
+  gyroX?: number;
+  gyroY?: number;
+  gyroZ?: number;
 }
 
 export type ConnectionStatus = 'online' | 'offline';

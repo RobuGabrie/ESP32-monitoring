@@ -8,6 +8,7 @@ import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TabHero } from '@/components/TabHero';
+import { TemperatureThermometerCard } from '@/components/TemperatureThermometerCard';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
@@ -39,13 +40,6 @@ const cardMeta = {
     source: 'Termistor',
     color: '#2563EB',
     detailLabel: (v: number) => `${v.toFixed(1)} °C`
-  },
-  light: {
-    icon: 'sunny',
-    title: 'Luminozitate',
-    source: 'LDR',
-    color: '#F59E0B',
-    detailLabel: (v: number) => `${v.toFixed(1)} %`
   },
   cpu: {
     icon: 'cog',
@@ -99,9 +93,6 @@ export default function OverviewScreen() {
     return undefined;
   }, [pulseAnim, status]);
 
-  const lightRaw = Math.max(0, Math.min(255, Math.round(data?.lightRaw ?? 0)));
-  const lightPercent = Math.max(0, Math.min(100, Math.round(((255 - lightRaw) / 255) * 100)));
-
   const onExportPress = useCallback(async () => {
     try {
       const snapshot = {
@@ -142,16 +133,6 @@ export default function OverviewScreen() {
         detailLabel: cardMeta.temperature.detailLabel
       },
       {
-        icon: cardMeta.light.icon,
-        title: cardMeta.light.title,
-        cmd: 'light' as ModuleName,
-        source: cardMeta.light.source,
-        value: `${lightPercent.toFixed(1)} %`,
-        color: cardMeta.light.color,
-        history: history.lightHistory,
-        detailLabel: cardMeta.light.detailLabel
-      },
-      {
         icon: cardMeta.cpu.icon,
         title: cardMeta.cpu.title,
         cmd: 'cpu' as ModuleName,
@@ -172,11 +153,11 @@ export default function OverviewScreen() {
         detailLabel: cardMeta.current.detailLabel
       }
     ],
-    [data, history, lightPercent]
+    [data, history]
   );
 
-  const environmentCards = cards.slice(0, 2);
-  const systemCards = cards.slice(2, 4);
+  const temperatureCard = cards.find((item) => item.cmd === 'temperature') ?? null;
+  const systemCards = cards.filter((item) => item.cmd !== 'temperature');
 
   const lastUpdated = data?.recordedAtMs
     ? format(data.recordedAtMs, 'dd.MM.yyyy HH:mm:ss')
@@ -299,21 +280,20 @@ export default function OverviewScreen() {
 
         <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
 
-        <SectionHeader title="Senzori de mediu" count={environmentCards.length} onActionPress={onExportPress} actionLabel="Export JSON" />
-        <View style={styles.cardRow}>
-          {environmentCards.map((item) => (
-            <View key={item.title} style={styles.cardWrap}>
-              <DeviceCard
-                {...item}
-                enabled={moduleStates[item.cmd]}
-                onPress={() => setSelectedCmd(item.cmd)}
-                onToggle={(value) => {
-                  sendModuleCommand(item.cmd, value);
-                }}
-              />
-            </View>
-          ))}
-        </View>
+        <SectionHeader title="Senzori de mediu" count={temperatureCard ? 1 : 0} onActionPress={onExportPress} actionLabel="Export JSON" />
+        {temperatureCard ? (
+          <Pressable onPress={() => setSelectedCmd('temperature')}>
+            <TemperatureThermometerCard
+              temperature={data?.temp ?? 0}
+              enabled={moduleStates.temperature}
+              onToggle={(value) => {
+                sendModuleCommand('temperature', value);
+              }}
+              min={0}
+              max={50}
+            />
+          </Pressable>
+        ) : null}
 
         <SectionHeader title="Putere și sistem" count={systemCards.length} />
         <View style={styles.cardRow}>
