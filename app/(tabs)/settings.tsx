@@ -8,6 +8,7 @@ import { NetworkTable } from '@/components/NetworkTable';
 import { ScreenShell } from '@/components/ScreenShell';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SignalBars } from '@/components/SignalBars';
+import { StatusSummaryCard } from '@/components/StatusSummaryCard';
 import { TabHero } from '@/components/TabHero';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { BATTERY_CAPACITY } from '@/constants/config';
@@ -41,32 +42,55 @@ export default function SettingsScreen() {
       label: 'RSSI',
       value: `${Math.round(data?.rssi ?? -99)} dBm`,
       icon: 'wifi-outline' as const,
-      tone: '#E0F2FE'
+      tone: '#ECF4FF'
     },
     {
       key: 'volt',
       label: 'Tensiune',
       value: `${(data?.volt ?? 0).toFixed(2)} V`,
       icon: 'pulse-outline' as const,
-      tone: '#ECFDF5'
+      tone: '#EDF8F2'
     },
     {
       key: 'current',
       label: 'Curent',
       value: `${Math.abs(data?.current ?? 0).toFixed(1)} mA`,
       icon: 'flash-outline' as const,
-      tone: '#FEF3C7'
+      tone: '#FFF6DF'
     },
     {
       key: 'battery',
       label: 'Baterie',
       value: `${Math.round(percent)}%`,
       icon: 'battery-half-outline' as const,
+      tone: '#F1EEFB'
+    }
+  ];
+  const energyTiles = [
+    {
+      key: 'power',
+      label: 'Putere instant',
+      value: `${(data?.powerMw ?? 0).toFixed(1)} mW`,
+      icon: 'flash-outline' as const,
+      tone: '#FEF3C7'
+    },
+    {
+      key: 'avg',
+      label: 'Curent mediu',
+      value: `${avgCurrent.toFixed(1)} mA`,
+      icon: 'analytics-outline' as const,
+      tone: '#E0F2FE'
+    },
+    {
+      key: 'peak',
+      label: 'Curent maxim',
+      value: `${peakCurrent.toFixed(1)} mA`,
+      icon: 'trending-up-outline' as const,
       tone: '#EDE9FE'
     }
   ];
 
-  const networkRows: Array<{ keyLabel: string; value: string; statusTone?: 'online' | 'offline' }> = [
+  const networkRows: { keyLabel: string; value: string; statusTone?: 'online' | 'offline' }[] = [
     { keyLabel: 'SSID', value: data?.ssid ?? '--' },
     { keyLabel: 'IP', value: data?.ip ?? '--' },
     { keyLabel: 'MAC', value: data?.mac ?? '--' },
@@ -94,15 +118,15 @@ export default function SettingsScreen() {
             <SectionHeader title="Status rapid" count={quickTiles.length} />
             <View style={styles.quickGrid}>
               {quickTiles.map((tile) => (
-                <View key={tile.key} style={styles.quickTile}>
-                  <View style={styles.quickHead}>
-                    <View style={[styles.quickIconWrap, { backgroundColor: tile.tone }]}> 
-                      <Ionicons name={tile.icon} size={15} color="#1E293B" />
-                    </View>
-                    <Text style={styles.quickLabel}>{tile.label}</Text>
-                  </View>
-                  <Text style={styles.quickValue}>{tile.value}</Text>
-                </View>
+                <StatusSummaryCard
+                  key={tile.key}
+                  label={tile.label}
+                  value={tile.value}
+                  icon={tile.icon}
+                  accent={tile.tone}
+                  iconColor="#1E293B"
+                  style={styles.quickTile}
+                />
               ))}
             </View>
           </View>
@@ -134,18 +158,17 @@ export default function SettingsScreen() {
             <SectionHeader title="Energie" count={1} />
             <View style={styles.energyCard}>
               <View style={styles.energyKpiGrid}>
-                <View style={styles.energyKpi}>
-                  <Text style={styles.energyKpiLabel}>Putere instant</Text>
-                  <Text style={styles.energyKpiValue}>{`${(data?.powerMw ?? 0).toFixed(1)} mW`}</Text>
-                </View>
-                <View style={styles.energyKpi}>
-                  <Text style={styles.energyKpiLabel}>Curent mediu</Text>
-                  <Text style={styles.energyKpiValue}>{`${avgCurrent.toFixed(1)} mA`}</Text>
-                </View>
-                <View style={styles.energyKpi}>
-                  <Text style={styles.energyKpiLabel}>Curent maxim</Text>
-                  <Text style={styles.energyKpiValue}>{`${peakCurrent.toFixed(1)} mA`}</Text>
-                </View>
+                {energyTiles.map((tile) => (
+                  <StatusSummaryCard
+                    key={tile.key}
+                    label={tile.label}
+                    value={tile.value}
+                    icon={tile.icon}
+                    accent={tile.tone}
+                    iconColor="#1E293B"
+                    style={styles.energyKpi}
+                  />
+                ))}
               </View>
               <BatteryBar percent={percent} />
               <View style={styles.energyDivider} />
@@ -243,37 +266,7 @@ const styles = StyleSheet.create({
   },
   quickTile: {
     flexBasis: '48%',
-    minWidth: 150,
-    backgroundColor: '#F7FAFE',
-    borderWidth: 1,
-    borderColor: '#DCE7F3',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    minHeight: 82
-  },
-  quickHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  quickIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  quickLabel: {
-    color: '#64748B',
-    fontFamily: theme.font.medium,
-    fontSize: 12
-  },
-  quickValue: {
-    marginTop: 5,
-    color: '#0F172A',
-    fontFamily: theme.font.bold,
-    fontSize: 20
+    minWidth: 150
   },
   connectivityCard: {
     marginTop: 2,
@@ -357,25 +350,8 @@ const styles = StyleSheet.create({
   },
   energyKpi: {
     flexBasis: '31%',
-    minWidth: 110,
-    flexGrow: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-    paddingVertical: 8,
-    paddingHorizontal: 9
-  },
-  energyKpiLabel: {
-    color: '#64748B',
-    fontFamily: theme.font.medium,
-    fontSize: 11
-  },
-  energyKpiValue: {
-    marginTop: 2,
-    color: '#0F172A',
-    fontFamily: theme.font.bold,
-    fontSize: 15
+    minWidth: 160,
+    flexGrow: 1
   },
   energyDivider: {
     marginVertical: 8,

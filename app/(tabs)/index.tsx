@@ -8,6 +8,7 @@ import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
 import { SectionHeader } from '@/components/SectionHeader';
 import { ScreenShell } from '@/components/ScreenShell';
+import { StatusSummaryCard } from '@/components/StatusSummaryCard';
 import { TabHero } from '@/components/TabHero';
 import { TemperatureThermometerCard } from '@/components/TemperatureThermometerCard';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
@@ -271,15 +272,14 @@ export default function OverviewScreen() {
         <View style={styles.panel}>
           <View style={styles.summaryGrid}>
             {summaryCards.map((item) => (
-              <View key={item.key} style={[styles.summaryCard, isDesktop ? styles.summaryCardDesktop : styles.summaryCardMobile]}>
-                <View style={styles.summaryHeader}>
-                  <View style={[styles.summaryIconWrap, { backgroundColor: item.accent }]}> 
-                    <Ionicons name={item.icon} size={13} color="#1E3A8A" />
-                  </View>
-                  <Text style={styles.summaryLabel}>{item.label}</Text>
-                </View>
-                <Text style={styles.summaryValue}>{item.value}</Text>
-              </View>
+              <StatusSummaryCard
+                key={item.key}
+                label={item.label}
+                value={item.value}
+                icon={item.icon}
+                accent={item.accent}
+                style={isDesktop ? styles.summaryCardDesktop : styles.summaryCardMobile}
+              />
             ))}
           </View>
         </View>
@@ -454,44 +454,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 9
   },
-  summaryCard: {
-    flexGrow: 1,
-    minWidth: 150,
-    backgroundColor: '#F7FAFE',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DCE7F3',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    minHeight: 86
-  },
   summaryCardMobile: {
-    flexBasis: '48%'
+    flexBasis: '48%',
+    minWidth: 150
   },
   summaryCardDesktop: {
-    flexBasis: '23%'
-  },
-  summaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7
-  },
-  summaryIconWrap: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  summaryLabel: {
-    color: theme.colors.textSoft,
-    ...theme.type.cardLabel
-  },
-  summaryValue: {
-    marginTop: 7,
-    color: theme.colors.text,
-    ...theme.type.cardValue,
-    lineHeight: 30
+    flexBasis: '23%',
+    minWidth: 150
   },
   healthRow: {
     marginTop: 10,

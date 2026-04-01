@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SectionHeader } from '@/components/SectionHeader';
 import { ScreenShell } from '@/components/ScreenShell';
 import { TabHero } from '@/components/TabHero';
+import { StatusSummaryCard } from '@/components/StatusSummaryCard';
 import { theme } from '@/constants/theme';
 import { useESP32 } from '@/hooks/useESP32';
 
@@ -12,7 +13,8 @@ type SensorCard = {
   key: string;
   label: string;
   value: string;
-  tone: 'primary' | 'neutral' | 'success';
+  icon: keyof typeof Ionicons.glyphMap;
+  accent: string;
 };
 
 const formatKvLine = (obj: Record<string, number> | undefined) => {
@@ -37,19 +39,22 @@ export default function SensorsScreen() {
       key: 'temp',
       label: 'Temperatura',
       value: data ? `${data.temp.toFixed(1)} °C` : '--',
-      tone: 'primary'
+      icon: 'thermometer-outline',
+      accent: '#DBEAFE'
     },
     {
       key: 'light',
       label: 'Lumina',
       value: data ? `${(data.lightPercent ?? data.light).toFixed(1)} %` : '--',
-      tone: 'neutral'
+      icon: 'sunny-outline',
+      accent: '#E2E8F0'
     },
     {
       key: 'gpio',
       label: 'GPIO active',
       value: latest ? String(activeCount) : '--',
-      tone: 'success'
+      icon: 'hardware-chip-outline',
+      accent: '#DCFCE7'
     }
   ];
   const recentEntries = [...entries].reverse().slice(0, 6);
@@ -75,16 +80,15 @@ export default function SensorsScreen() {
             <SectionHeader title="Snapshot senzori" count={summaryCards.length} />
             <View style={styles.summaryGrid}>
               {summaryCards.map((item) => (
-                <View
+                <StatusSummaryCard
                   key={item.key}
-                  style={[
-                    styles.metricCard,
-                    item.tone === 'primary' ? styles.metricPrimary : item.tone === 'success' ? styles.metricSuccess : styles.metricNeutral
-                  ]}
-                >
-                  <Text style={styles.metricLabel}>{item.label}</Text>
-                  <Text style={styles.metricValue}>{item.value}</Text>
-                </View>
+                  label={item.label}
+                  value={item.value}
+                  icon={item.icon}
+                  accent={item.accent}
+                  iconColor="#334155"
+                  style={styles.metricCard}
+                />
               ))}
             </View>
           </View>
@@ -204,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#D6E4F3',
+    borderColor: '#DFE7F0',
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
@@ -213,39 +217,12 @@ const styles = StyleSheet.create({
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 9,
+    gap: 8,
     marginTop: 4
   },
   metricCard: {
     flexBasis: '48%',
-    minWidth: 145,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D8E3F0',
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    minHeight: 84
-  },
-  metricPrimary: {
-    backgroundColor: '#E7F0FF',
-    borderColor: '#C6DBFF'
-  },
-  metricNeutral: {
-    backgroundColor: '#F8FBFF'
-  },
-  metricSuccess: {
-    backgroundColor: '#EAFBF2'
-  },
-  metricLabel: {
-    color: '#51637A',
-    fontFamily: theme.font.medium,
-    fontSize: 12
-  },
-  metricValue: {
-    marginTop: 5,
-    color: '#0F172A',
-    fontFamily: theme.font.bold,
-    fontSize: 24
+    minWidth: 145
   },
   gpioGrid: {
     flexDirection: 'row',
@@ -269,18 +246,18 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   gpioDotHigh: {
-    backgroundColor: '#10B981'
+    backgroundColor: '#3B8F72'
   },
   gpioDotLow: {
-    backgroundColor: '#94A3B8'
+    backgroundColor: '#8C9AAD'
   },
   gpioCardHigh: {
-    backgroundColor: '#EAFBF2',
-    borderColor: '#A9E6C6'
+    backgroundColor: '#EEF7F2',
+    borderColor: '#CFE2D6'
   },
   gpioCardLow: {
-    backgroundColor: '#F6F9FD',
-    borderColor: '#DFE8F1'
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E1E7EF'
   },
   gpioLabel: {
     color: '#475569',
@@ -300,7 +277,7 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   gpioStateHigh: {
-    color: '#047857'
+    color: '#2E6D57'
   },
   gpioStateLow: {
     color: '#475569'
@@ -321,10 +298,10 @@ const styles = StyleSheet.create({
     gap: 7
   },
   sensorChip: {
-    backgroundColor: '#EEF4FF',
+    backgroundColor: '#F2F5FA',
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: '#C9D6F5',
+    borderColor: '#D8E0EC',
     paddingHorizontal: 10,
     paddingVertical: 9,
     minWidth: 92
@@ -365,12 +342,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: '#E9F0FF',
+    backgroundColor: '#F1F4FA',
     borderWidth: 1,
-    borderColor: '#CCDCF9'
+    borderColor: '#D6E0EE'
   },
   entryBadgeText: {
-    color: '#1E40AF',
+    color: '#36527B',
     fontFamily: theme.font.semiBold,
     fontSize: 11
   },
@@ -388,8 +365,8 @@ const styles = StyleSheet.create({
   kvRow: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E0E8F2',
-    backgroundColor: '#F5F8FC',
+    borderColor: '#E2E8EF',
+    backgroundColor: '#F7F9FC',
     paddingHorizontal: 8,
     paddingVertical: 7,
     gap: 4
