@@ -10,11 +10,12 @@ interface Row {
 
 interface Props {
   rows: Row[];
+  embedded?: boolean;
 }
 
-export function NetworkTable({ rows }: Props) {
+export function NetworkTable({ rows, embedded = false }: Props) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, embedded ? styles.cardEmbedded : null]}>
       {rows.map((row, index) => (
         <View style={[styles.row, index === rows.length - 1 ? styles.rowLast : null]} key={row.keyLabel}>
           <Text style={styles.key}>{row.keyLabel}</Text>
@@ -43,6 +44,16 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     borderLeftWidth: 3,
     borderLeftColor: '#DBEAFE'
+  },
+  cardEmbedded: {
+    marginBottom: 0,
+    borderLeftWidth: 0,
+    borderLeftColor: 'transparent',
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 2
   },
   row: {
     flexDirection: 'row',

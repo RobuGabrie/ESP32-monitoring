@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Easing, Modal, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { DeviceCard } from '@/components/DeviceCard';
 import { FullChart } from '@/components/FullChart';
 import { SectionHeader } from '@/components/SectionHeader';
+import { ScreenShell } from '@/components/ScreenShell';
 import { TabHero } from '@/components/TabHero';
 import { TemperatureThermometerCard } from '@/components/TemperatureThermometerCard';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
@@ -64,8 +65,10 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 
 export default function OverviewScreen() {
   const { data, history, status, ioLog, moduleStates, sendModuleCommand, sendCpuStressCommand, selectedRange, setTimeRange } = useESP32();
+  const { width } = useWindowDimensions();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [selectedCmd, setSelectedCmd] = useState<ModuleName | null>(null);
+  const isDesktop = width >= 1024;
 
   useEffect(() => {
     if (status !== 'offline') {
@@ -120,6 +123,40 @@ export default function OverviewScreen() {
     }
   }, [data, history, ioLog, moduleStates, status]);
 
+  const summaryCards = useMemo<SummaryCard[]>(
+    () => [
+      {
+        key: 'status',
+        label: 'Conexiune',
+        value: status === 'offline' ? 'Offline' : 'Conectat',
+        icon: status === 'offline' ? 'cloud-offline' : 'cloud-done',
+        accent: status === 'offline' ? '#FEE2E2' : '#DCFCE7'
+      },
+      {
+        key: 'uptime',
+        label: 'Timp activ',
+        value: `${Math.round(data?.uptime ?? 0)} s`,
+        icon: 'time',
+        accent: '#DBEAFE'
+      },
+      {
+        key: 'power',
+        label: 'Putere',
+        value: `${(data?.powerMw ?? 0).toFixed(1)} mW`,
+        icon: 'flash',
+        accent: '#FEF3C7'
+      },
+      {
+        key: 'battery',
+        label: 'Baterie',
+        value: `${Math.round(data?.batteryPercent ?? 0)}%`,
+        icon: 'battery-half',
+        accent: '#E2E8F0'
+      }
+    ],
+    [data?.batteryPercent, data?.powerMw, data?.uptime, status]
+  );
+
   const cards = useMemo<DashboardCard[]>(
     () => [
       {
@@ -165,40 +202,6 @@ export default function OverviewScreen() {
       ? data.timestamp
       : '--';
 
-  const summaryCards = useMemo<SummaryCard[]>(
-    () => [
-      {
-        key: 'status',
-        label: 'Conexiune',
-        value: status === 'offline' ? 'Offline' : 'Conectat',
-        icon: status === 'offline' ? 'cloud-offline' : 'cloud-done',
-        accent: status === 'offline' ? '#FEE2E2' : '#DCFCE7'
-      },
-      {
-        key: 'uptime',
-        label: 'Timp activ',
-        value: `${Math.round(data?.uptime ?? 0)} s`,
-        icon: 'time',
-        accent: '#DBEAFE'
-      },
-      {
-        key: 'power',
-        label: 'Putere',
-        value: `${(data?.powerMw ?? 0).toFixed(1)} mW`,
-        icon: 'flash',
-        accent: '#FEF3C7'
-      },
-      {
-        key: 'battery',
-        label: 'Baterie',
-        value: `${Math.round(data?.batteryPercent ?? 0)}%`,
-        icon: 'battery-half',
-        accent: '#E2E8F0'
-      }
-    ],
-    [data?.batteryPercent, data?.powerMw, data?.uptime, status]
-  );
-
   const selectedCard = useMemo(() => cards.find((c) => c.cmd === selectedCmd) ?? null, [cards, selectedCmd]);
   const selectedSeries = useMemo(() => selectedCard?.history.slice(-5000) ?? [], [selectedCard]);
   const detailStats = useMemo(() => {
@@ -232,6 +235,7 @@ export default function OverviewScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
+        <ScreenShell contentStyle={styles.pageShell}>
         <TabHero
           title="Panou ESP32"
           subtitle="Monitorizare live și control module într-un singur loc."
@@ -264,76 +268,88 @@ export default function OverviewScreen() {
           )}
         />
 
-        <View style={styles.summaryGrid}>
-          {summaryCards.map((item) => (
-            <View key={item.key} style={styles.summaryCard}>
-              <View style={styles.summaryHeader}>
-                <View style={[styles.summaryIconWrap, { backgroundColor: item.accent }]}>
-                  <Ionicons name={item.icon} size={13} color="#1E3A8A" />
+        <View style={styles.panel}>
+          <View style={styles.summaryGrid}>
+            {summaryCards.map((item) => (
+              <View key={item.key} style={[styles.summaryCard, isDesktop ? styles.summaryCardDesktop : styles.summaryCardMobile]}>
+                <View style={styles.summaryHeader}>
+                  <View style={[styles.summaryIconWrap, { backgroundColor: item.accent }]}> 
+                    <Ionicons name={item.icon} size={13} color="#1E3A8A" />
+                  </View>
+                  <Text style={styles.summaryLabel}>{item.label}</Text>
                 </View>
-                <Text style={styles.summaryLabel}>{item.label}</Text>
+                <Text style={styles.summaryValue}>{item.value}</Text>
               </View>
-              <Text style={styles.summaryValue}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
-
-        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
-
-        <SectionHeader title="Senzori de mediu" count={temperatureCard ? 1 : 0} onActionPress={onExportPress} actionLabel="Export JSON" />
-        {temperatureCard ? (
-          <Pressable onPress={() => setSelectedCmd('temperature')}>
-            <TemperatureThermometerCard
-              temperature={data?.temp ?? 0}
-              enabled={moduleStates.temperature}
-              onToggle={(value) => {
-                sendModuleCommand('temperature', value);
-              }}
-              min={0}
-              max={50}
-            />
-          </Pressable>
-        ) : null}
-
-        <SectionHeader title="Putere și sistem" count={systemCards.length} />
-        <View style={styles.cardRow}>
-          {systemCards.map((item) => (
-            <View key={item.title} style={styles.cardWrap}>
-              <DeviceCard
-                {...item}
-                enabled={moduleStates[item.cmd]}
-                onPress={() => setSelectedCmd(item.cmd)}
-                onToggle={(value) => {
-                  sendModuleCommand(item.cmd, value);
-                }}
-              />
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.cpuStressCard}>
-          <View style={styles.cpuStressHead}>
-            <View style={styles.cpuStressTitleRow}>
-              <Ionicons name="hardware-chip-outline" size={16} color="#0F172A" />
-              <Text style={styles.cpuStressTitle}>CPU Stress Test</Text>
-            </View>
-            <View style={[styles.cpuStressBadge, moduleStates.cpuStress ? styles.cpuStressBadgeOn : styles.cpuStressBadgeOff]}>
-              <Text style={[styles.cpuStressBadgeText, moduleStates.cpuStress ? styles.cpuStressBadgeTextOn : styles.cpuStressBadgeTextOff]}>
-                {moduleStates.cpuStress ? 'ACTIV' : 'OPRIT'}
-              </Text>
-            </View>
+            ))}
           </View>
-          <Text style={styles.cpuStressHint}>Pornește testul și urmărește cardul CPU: încărcarea trebuie să urce vizibil dacă măsurarea este corectă.</Text>
-          <Pressable
-            style={[styles.cpuStressButton, moduleStates.cpuStress ? styles.cpuStressButtonOn : styles.cpuStressButtonOff]}
-            onPress={() => {
-              sendCpuStressCommand(!moduleStates.cpuStress);
-            }}
-          >
-            <Ionicons name={moduleStates.cpuStress ? 'pause-circle-outline' : 'play-circle-outline'} size={16} color="#FFFFFF" />
-            <Text style={styles.cpuStressButtonText}>{moduleStates.cpuStress ? 'Opreste CPU Stress' : 'Porneste CPU Stress'}</Text>
-          </Pressable>
         </View>
+
+        <View style={styles.controlsPanel}>
+          <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
+        </View>
+
+        <View style={styles.panel}>
+          <SectionHeader title="Senzori de mediu" count={temperatureCard ? 1 : 0} onActionPress={onExportPress} actionLabel="Export JSON" />
+          {temperatureCard ? (
+            <Pressable onPress={() => setSelectedCmd('temperature')}>
+              <TemperatureThermometerCard
+                temperature={data?.temp ?? 0}
+                history={temperatureCard.history}
+                color={temperatureCard.color}
+                enabled={moduleStates.temperature}
+                onToggle={(value) => {
+                  sendModuleCommand('temperature', value);
+                }}
+                min={0}
+                max={50}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.panel}>
+          <SectionHeader title="Putere și sistem" count={systemCards.length} />
+          <View style={styles.cardRow}>
+            {systemCards.map((item) => (
+              <View key={item.title} style={[styles.cardWrap, isDesktop ? styles.cardWrapDesktop : styles.cardWrapMobile]}>
+                <DeviceCard
+                  {...item}
+                  cardStyle={styles.systemCardFlat}
+                  enabled={moduleStates[item.cmd]}
+                  onPress={() => setSelectedCmd(item.cmd)}
+                  onToggle={(value) => {
+                    sendModuleCommand(item.cmd, value);
+                  }}
+                />
+              </View>
+            ))}
+          </View>
+
+          <View style={[styles.cpuStressCard, isDesktop ? styles.cpuStressCardDesktop : null]}>
+            <View style={styles.cpuStressHead}>
+              <View style={styles.cpuStressTitleRow}>
+                <Ionicons name="hardware-chip-outline" size={16} color="#0F172A" />
+                <Text style={styles.cpuStressTitle}>CPU Stress Test</Text>
+              </View>
+              <View style={[styles.cpuStressBadge, moduleStates.cpuStress ? styles.cpuStressBadgeOn : styles.cpuStressBadgeOff]}>
+                <Text style={[styles.cpuStressBadgeText, moduleStates.cpuStress ? styles.cpuStressBadgeTextOn : styles.cpuStressBadgeTextOff]}>
+                  {moduleStates.cpuStress ? 'ACTIV' : 'OPRIT'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.cpuStressHint}>Pornește testul și urmărește cardul CPU: încărcarea trebuie să urce vizibil dacă măsurarea este corectă.</Text>
+            <Pressable
+              style={[styles.cpuStressButton, moduleStates.cpuStress ? styles.cpuStressButtonOn : styles.cpuStressButtonOff]}
+              onPress={() => {
+                sendCpuStressCommand(!moduleStates.cpuStress);
+              }}
+            >
+              <Ionicons name={moduleStates.cpuStress ? 'pause-circle-outline' : 'play-circle-outline'} size={16} color="#FFFFFF" />
+              <Text style={styles.cpuStressButtonText}>{moduleStates.cpuStress ? 'Opreste CPU Stress' : 'Porneste CPU Stress'}</Text>
+            </Pressable>
+          </View>
+        </View>
+        </ScreenShell>
       </ScrollView>
 
       <Modal visible={!!selectedCard} transparent animationType="fade" onRequestClose={() => setSelectedCmd(null)}>
@@ -402,22 +418,58 @@ export default function OverviewScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 16, paddingBottom: 120 },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 120,
+    alignItems: 'center'
+  },
+  pageShell: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0
+  },
+  panel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: '#DEE8F3',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    ...theme.shadow.card
+  },
+  controlsPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: '#DEE8F3',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+    ...theme.shadow.card
+  },
   summaryGrid: {
-    marginBottom: 16,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10
+    gap: 9
   },
   summaryCard: {
-    flexBasis: '48%',
+    flexGrow: 1,
     minWidth: 150,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.md,
+    backgroundColor: '#F7FAFE',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5EAF1',
+    borderColor: '#DCE7F3',
     paddingVertical: 12,
-    paddingHorizontal: 12
+    paddingHorizontal: 12,
+    minHeight: 86
+  },
+  summaryCardMobile: {
+    flexBasis: '48%'
+  },
+  summaryCardDesktop: {
+    flexBasis: '23%'
   },
   summaryHeader: {
     flexDirection: 'row',
@@ -436,7 +488,7 @@ const styles = StyleSheet.create({
     ...theme.type.cardLabel
   },
   summaryValue: {
-    marginTop: 6,
+    marginTop: 7,
     color: theme.colors.text,
     ...theme.type.cardValue,
     lineHeight: 30
@@ -472,22 +524,43 @@ const styles = StyleSheet.create({
   },
   cardRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
-    alignItems: 'stretch'
+    alignItems: 'stretch',
+    marginTop: 2
   },
-  cardWrap: { flex: 1 },
+  cardWrap: {
+    flexGrow: 1
+  },
+  cardWrapMobile: {
+    flexBasis: '100%'
+  },
+  cardWrapDesktop: {
+    flexBasis: '48%',
+    minWidth: 320
+  },
+  systemCardFlat: {
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+    backgroundColor: '#F9FBFE'
+  },
   cpuStressCard: {
     marginTop: 10,
-    marginBottom: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F7FAFD',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#DCE5F0',
     paddingVertical: 10,
     paddingHorizontal: 12,
     width: '100%',
     maxWidth: 560,
     alignSelf: 'center'
+  },
+  cpuStressCardDesktop: {
+    maxWidth: 720
   },
   cpuStressHead: {
     flexDirection: 'row',

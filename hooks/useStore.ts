@@ -28,6 +28,31 @@ export interface ESP32Data {
   gyroX?: number;
   gyroY?: number;
   gyroZ?: number;
+  dtMs?: number;
+  stationary?: boolean;
+  q0?: number;
+  q1?: number;
+  q2?: number;
+  q3?: number;
+  roll?: number;
+  pitch?: number;
+  yaw?: number;
+  quaternionNorm?: number;
+  imuRateHz?: number;
+  imuMode?: string;
+  motionMode?: string;
+  linAx?: number;
+  linAy?: number;
+  linAz?: number;
+  velX?: number;
+  velY?: number;
+  velZ?: number;
+  posX?: number;
+  posY?: number;
+  posZ?: number;
+  gravX?: number;
+  gravY?: number;
+  gravZ?: number;
 }
 
 export type ConnectionStatus = 'online' | 'offline';
@@ -78,14 +103,38 @@ interface StoreState {
   setModuleStates: (states: Partial<ModuleStates>) => void;
   setTimeRange: (range: TimeRangeKey) => void;
   addLog: (entry: IOLogEntry) => void;
+  setImuFrame: (frame: Partial<ESP32Data>) => void;
   hydrateHistory: (readings: ESP32Data[], logs: IOLogEntry[]) => void;
   reset: () => void;
 }
 
 type StoreData = Omit<
   StoreState,
-  'pushReading' | 'setConnectionStatus' | 'setModuleState' | 'setModuleStates' | 'setTimeRange' | 'addLog' | 'hydrateHistory' | 'reset'
+  'pushReading' | 'setConnectionStatus' | 'setModuleState' | 'setModuleStates' | 'setTimeRange' | 'addLog' | 'setImuFrame' | 'hydrateHistory' | 'reset'
 >;
+
+const emptyReading = (): ESP32Data => ({
+  timestamp: '',
+  recordedAtMs: Date.now(),
+  uptime: 0,
+  temp: 0,
+  light: 0,
+  lightRaw: 0,
+  lightPercent: 0,
+  cpu: 0,
+  volt: 0,
+  current: 0,
+  powerMw: 0,
+  totalMah: 0,
+  batteryPercent: 0,
+  batteryLifeMin: 0,
+  rssi: -99,
+  gpio: {},
+  ssid: '--',
+  ip: '--',
+  mac: '--',
+  channel: 0
+});
 
 const baseData = (): StoreData => ({
   data: null,
@@ -164,6 +213,16 @@ const actions = {
   },
   addLog: (entry: IOLogEntry) => {
     setData({ ioLog: capLog(storeData.ioLog, entry) });
+  },
+  setImuFrame: (frame: Partial<ESP32Data>) => {
+    const current = storeData.data ?? emptyReading();
+    setData({
+      data: {
+        ...current,
+        ...frame,
+        recordedAtMs: frame.recordedAtMs ?? Date.now()
+      }
+    });
   },
   hydrateHistory: (readings: ESP32Data[], logs: IOLogEntry[]) => {
     if (!readings.length && !logs.length) {

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BatteryBar } from '@/components/BatteryBar';
 import { FullChart } from '@/components/FullChart';
 import { NetworkTable } from '@/components/NetworkTable';
+import { ScreenShell } from '@/components/ScreenShell';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SignalBars } from '@/components/SignalBars';
 import { TabHero } from '@/components/TabHero';
@@ -65,93 +66,133 @@ export default function SettingsScreen() {
     }
   ];
 
+  const networkRows: Array<{ keyLabel: string; value: string; statusTone?: 'online' | 'offline' }> = [
+    { keyLabel: 'SSID', value: data?.ssid ?? '--' },
+    { keyLabel: 'IP', value: data?.ip ?? '--' },
+    { keyLabel: 'MAC', value: data?.mac ?? '--' },
+    { keyLabel: 'Canal', value: String(data?.channel ?? '--') },
+    { keyLabel: 'RSSI', value: `${Math.round(data?.rssi ?? -99)} dBm` },
+    { keyLabel: 'Status', value: status === 'online' ? 'Conectat' : 'Offline', statusTone: status === 'online' ? 'online' : 'offline' }
+  ];
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <TabHero
-          title="Settings"
-          subtitle="Centru unificat pentru conectivitate, energie si starea sistemului."
-          statusLabel={status === 'online' ? 'Conectat' : 'Offline'}
-          statusTone={status === 'online' ? 'online' : 'offline'}
-          meta={[
-            { label: 'SSID', value: data?.ssid ?? '--' },
-            { label: 'IP', value: data?.ip ?? '--' }
-          ]}
-        />
+        <ScreenShell contentStyle={styles.pageShell}>
+          <TabHero
+            title="Settings"
+            subtitle="Centru unificat pentru conectivitate, energie si starea sistemului."
+            statusLabel={status === 'online' ? 'Conectat' : 'Offline'}
+            statusTone={status === 'online' ? 'online' : 'offline'}
+            meta={[
+              { label: 'SSID', value: data?.ssid ?? '--' },
+              { label: 'IP', value: data?.ip ?? '--' }
+            ]}
+          />
 
-        <SectionHeader title="Status rapid" count={quickTiles.length} />
-        <View style={styles.quickGrid}>
-          {quickTiles.map((tile) => (
-            <View key={tile.key} style={styles.quickTile}>
-              <View style={[styles.quickIconWrap, { backgroundColor: tile.tone }]}>
-                <Ionicons name={tile.icon} size={15} color="#1E293B" />
+          <View style={styles.panel}>
+            <SectionHeader title="Status rapid" count={quickTiles.length} />
+            <View style={styles.quickGrid}>
+              {quickTiles.map((tile) => (
+                <View key={tile.key} style={styles.quickTile}>
+                  <View style={styles.quickHead}>
+                    <View style={[styles.quickIconWrap, { backgroundColor: tile.tone }]}> 
+                      <Ionicons name={tile.icon} size={15} color="#1E293B" />
+                    </View>
+                    <Text style={styles.quickLabel}>{tile.label}</Text>
+                  </View>
+                  <Text style={styles.quickValue}>{tile.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.panel}>
+            <SectionHeader title="Conectivitate" count={2} />
+            <View style={styles.connectivityCard}>
+              <View style={styles.connectivityHead}>
+                <View style={styles.connectivityTitleWrap}>
+                  <View style={styles.connectivityIconWrap}>
+                    <Ionicons name="wifi-outline" size={15} color="#1D4ED8" />
+                  </View>
+                  <Text style={styles.connectivityTitle}>Retea Wi-Fi</Text>
+                </View>
+                <View style={[styles.connectivityStatusPill, status === 'online' ? styles.connectivityStatusOnline : styles.connectivityStatusOffline]}>
+                  <Text style={[styles.connectivityStatusText, status === 'online' ? styles.connectivityStatusTextOnline : styles.connectivityStatusTextOffline]}>
+                    {status === 'online' ? 'Conectat' : 'Offline'}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.quickLabel}>{tile.label}</Text>
-              <Text style={styles.quickValue}>{tile.value}</Text>
-            </View>
-          ))}
-        </View>
 
-        <View style={styles.dualCardWrap}>
-          <View style={styles.dualCard}>
-            <Text style={styles.dualCardTitle}>Conexiune</Text>
-            <SignalBars rssi={data?.rssi ?? -99} />
-            <NetworkTable
-              rows={[
-                { keyLabel: 'SSID', value: data?.ssid ?? '--' },
-                { keyLabel: 'IP', value: data?.ip ?? '--' },
-                { keyLabel: 'MAC', value: data?.mac ?? '--' },
-                { keyLabel: 'Canal', value: String(data?.channel ?? '--') },
-                { keyLabel: 'RSSI', value: `${Math.round(data?.rssi ?? -99)} dBm` },
-                { keyLabel: 'Status', value: status === 'online' ? 'Conectat' : 'Offline', statusTone: status === 'online' ? 'online' : 'offline' }
-              ]}
-            />
-          </View>
-
-          <View style={styles.dualCard}>
-            <Text style={styles.dualCardTitle}>Energie</Text>
-            <View style={styles.energyRows}>
-              <Row label="Putere instant" value={`${(data?.powerMw ?? 0).toFixed(1)} mW`} />
-              <Row label="Curent mediu" value={`${avgCurrent.toFixed(1)} mA`} />
-              <Row label="Curent maxim" value={`${peakCurrent.toFixed(1)} mA`} />
-            </View>
-            <BatteryBar percent={percent} />
-            <View style={styles.energyRows}>
-              <Row label="Autonomie estimata" value={remainingHours > 0 ? `${remainingHours.toFixed(1)} h` : '--'} />
-              <Row label="Capacitate folosita" value={`${usedMah.toFixed(2)} mAh`} />
+              <SignalBars rssi={data?.rssi ?? -99} embedded />
+              <View style={styles.connectivityDivider} />
+              <NetworkTable rows={networkRows} embedded />
             </View>
           </View>
-        </View>
 
-        <SectionHeader title="Trenduri" count={3} />
-        <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
-        <FullChart
-          title="Tensiune alimentare (V)"
-          data={history.voltHistory}
-          xValues={history.timeline}
-          color={theme.chart.palette.voltage}
-          label={(v) => `${v.toFixed(2)} V`}
-          height={190}
-          showLegend
-        />
-        <FullChart
-          title="Curent (mA)"
-          data={history.currentHistory}
-          xValues={history.timeline}
-          color={theme.chart.palette.current}
-          label={(v) => `${Math.abs(v).toFixed(1)} mA`}
-          height={190}
-          showLegend
-        />
-        <FullChart
-          title="Trend RSSI (dBm)"
-          data={history.rssiHistory}
-          xValues={history.timeline}
-          color={theme.chart.palette.rssi}
-          label={(v) => `${Math.round(v)} dBm`}
-          height={190}
-          showLegend
-        />
+          <View style={styles.panel}>
+            <SectionHeader title="Energie" count={1} />
+            <View style={styles.energyCard}>
+              <View style={styles.energyKpiGrid}>
+                <View style={styles.energyKpi}>
+                  <Text style={styles.energyKpiLabel}>Putere instant</Text>
+                  <Text style={styles.energyKpiValue}>{`${(data?.powerMw ?? 0).toFixed(1)} mW`}</Text>
+                </View>
+                <View style={styles.energyKpi}>
+                  <Text style={styles.energyKpiLabel}>Curent mediu</Text>
+                  <Text style={styles.energyKpiValue}>{`${avgCurrent.toFixed(1)} mA`}</Text>
+                </View>
+                <View style={styles.energyKpi}>
+                  <Text style={styles.energyKpiLabel}>Curent maxim</Text>
+                  <Text style={styles.energyKpiValue}>{`${peakCurrent.toFixed(1)} mA`}</Text>
+                </View>
+              </View>
+              <BatteryBar percent={percent} />
+              <View style={styles.energyDivider} />
+              <View style={styles.energyRows}>
+                <Row label="Autonomie estimata" value={remainingHours > 0 ? `${remainingHours.toFixed(1)} h` : '--'} />
+                <Row label="Capacitate folosita" value={`${usedMah.toFixed(2)} mAh`} />
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.controlsPanel}>
+            <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
+          </View>
+
+          <View style={styles.panel}>
+            <SectionHeader title="Trenduri" count={3} />
+            <View style={styles.trendsWrap}>
+              <FullChart
+                title="Tensiune alimentare (V)"
+                data={history.voltHistory}
+                xValues={history.timeline}
+                color={theme.chart.palette.voltage}
+                label={(v) => `${v.toFixed(2)} V`}
+                height={190}
+                showLegend
+              />
+              <FullChart
+                title="Curent (mA)"
+                data={history.currentHistory}
+                xValues={history.timeline}
+                color={theme.chart.palette.current}
+                label={(v) => `${Math.abs(v).toFixed(1)} mA`}
+                height={190}
+                showLegend
+              />
+              <FullChart
+                title="Trend RSSI (dBm)"
+                data={history.rssiHistory}
+                xValues={history.timeline}
+                color={theme.chart.palette.rssi}
+                label={(v) => `${Math.round(v)} dBm`}
+                height={190}
+                showLegend
+              />
+            </View>
+          </View>
+        </ScreenShell>
       </ScrollView>
     </SafeAreaView>
   );
@@ -168,22 +209,53 @@ function Row({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 12, paddingBottom: 96 },
+  content: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 104 },
+  pageShell: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0
+  },
+  panel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: '#DEE8F3',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    ...theme.shadow.card
+  },
+  controlsPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: '#DEE8F3',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+    ...theme.shadow.card
+  },
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12
+    marginTop: 4
   },
   quickTile: {
     flexBasis: '48%',
     minWidth: 150,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: '#F7FAFE',
     borderWidth: 1,
-    borderColor: '#E3E8EF',
+    borderColor: '#DCE7F3',
     borderRadius: 12,
     paddingVertical: 10,
-    paddingHorizontal: 10
+    paddingHorizontal: 10,
+    minHeight: 82
+  },
+  quickHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
   quickIconWrap: {
     width: 24,
@@ -193,37 +265,126 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   quickLabel: {
-    marginTop: 6,
     color: '#64748B',
     fontFamily: theme.font.medium,
     fontSize: 12
   },
   quickValue: {
-    marginTop: 2,
+    marginTop: 5,
     color: '#0F172A',
     fontFamily: theme.font.bold,
     fontSize: 20
   },
-  dualCardWrap: {
-    gap: 10,
+  connectivityCard: {
+    marginTop: 2,
+    backgroundColor: '#FBFDFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DCE7F3',
+    paddingHorizontal: 12,
+    paddingVertical: 12
+  },
+  connectivityHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8
   },
-  dualCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 10,
-    ...theme.shadow.card
+  connectivityTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
-  dualCardTitle: {
+  connectivityIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: '#EAF2FF',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  connectivityTitle: {
     color: '#0F172A',
     fontFamily: theme.font.bold,
-    fontSize: 14,
-    marginBottom: 6
+    fontSize: 14
+  },
+  connectivityStatusPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4
+  },
+  connectivityStatusOnline: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0'
+  },
+  connectivityStatusOffline: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA'
+  },
+  connectivityStatusText: {
+    fontFamily: theme.font.semiBold,
+    fontSize: 11
+  },
+  connectivityStatusTextOnline: {
+    color: '#065F46'
+  },
+  connectivityStatusTextOffline: {
+    color: '#B91C1C'
+  },
+  connectivityDivider: {
+    marginVertical: 8,
+    height: 1,
+    backgroundColor: '#E3EAF3'
+  },
+  energyCard: {
+    marginTop: 2,
+    backgroundColor: '#FBFDFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DCE7F3',
+    paddingVertical: 12,
+    paddingHorizontal: 12
   },
   energyRows: {
     marginBottom: 6
+  },
+  energyKpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8
+  },
+  energyKpi: {
+    flexBasis: '31%',
+    minWidth: 110,
+    flexGrow: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 8,
+    paddingHorizontal: 9
+  },
+  energyKpiLabel: {
+    color: '#64748B',
+    fontFamily: theme.font.medium,
+    fontSize: 11
+  },
+  energyKpiValue: {
+    marginTop: 2,
+    color: '#0F172A',
+    fontFamily: theme.font.bold,
+    fontSize: 15
+  },
+  energyDivider: {
+    marginVertical: 8,
+    height: 1,
+    backgroundColor: '#E2E8F0'
+  },
+  trendsWrap: {
+    gap: 2,
+    marginTop: 2
   },
   row: {
     flexDirection: 'row',

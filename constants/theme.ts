@@ -58,6 +58,21 @@ export const theme = {
     bold: 'DMSans_700Bold'
   },
   type: {
+    bodySm: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: 'DMSans_500Medium' as const
+    },
+    bodyMd: {
+      fontSize: 14,
+      lineHeight: 20,
+      fontFamily: 'DMSans_500Medium' as const
+    },
+    bodyLg: {
+      fontSize: 16,
+      lineHeight: 22,
+      fontFamily: 'DMSans_500Medium' as const
+    },
     sectionTitle: {
       fontSize: 18,
       fontFamily: 'DMSans_700Bold' as const

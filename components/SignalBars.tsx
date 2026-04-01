@@ -4,6 +4,7 @@ import { theme } from '@/constants/theme';
 
 interface Props {
   rssi: number | string | null | undefined;
+  embedded?: boolean;
 }
 
 const toSafeRssi = (value: Props['rssi']) => {
@@ -38,13 +39,13 @@ const labelFromLevel = (level: number) => {
   return 'Foarte slab';
 };
 
-export function SignalBars({ rssi }: Props) {
+export function SignalBars({ rssi, embedded = false }: Props) {
   const safeRssi = toSafeRssi(rssi);
   const level = levelFromRssi(rssi);
   const levelLabel = labelFromLevel(level);
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, embedded ? styles.wrapEmbedded : null]}>
       <View style={styles.barsRow}>
         {[1, 2, 3, 4].map((n) => (
           <Bar key={n} index={n} level={level} withRightSpacing={n < 4} />
@@ -88,6 +89,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     marginBottom: 14
+  },
+  wrapEmbedded: {
+    marginBottom: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: '#DCE4F0',
+    backgroundColor: '#F8FAFC'
   },
   barsRow: {
     flexDirection: 'row',

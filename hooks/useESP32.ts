@@ -7,6 +7,8 @@ import process from 'process';
 
 import {
   HISTORY_LIMIT,
+  IMU_WS_PORT,
+  IMU_WS_URL,
   MQTT_BROKER,
   MQTT_CMD_TOPIC,
   MQTT_PASS,
@@ -50,6 +52,164 @@ const toNumber = (value: unknown, fallback = 0) => {
 const toBinary = (value: unknown): 0 | 1 => (toNumber(value, 0) > 0 ? 1 : 0);
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const getNestedValue = (obj: Record<string, unknown>, path: string): unknown => {
+  const segments = path.split('.');
+  let cursor: unknown = obj;
+
+  for (const segment of segments) {
+    if (!cursor || typeof cursor !== 'object') {
+      return undefined;
+    }
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+
+  return cursor;
+};
+
+const toNumberFromPaths = (obj: Record<string, unknown>, paths: string[], fallback = 0) => {
+  for (const path of paths) {
+    const value = getNestedValue(obj, path);
+    const parsed = toNumber(value, Number.NaN);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+};
+
+const toBoolean = (value: unknown, fallback = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'y', 'on', 'stationary', 'still'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'no', 'n', 'off', 'moving', 'motion'].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
+const toBooleanFromPaths = (obj: Record<string, unknown>, paths: string[], fallback = false) => {
+  for (const path of paths) {
+    const value = getNestedValue(obj, path);
+    if (typeof value !== 'undefined') {
+      return toBoolean(value, fallback);
+    }
+  }
+
+  return fallback;
+};
+
+const parseNormalizedQuaternion = (rec: Record<string, unknown>) => {
+  const q0 = toNumberFromPaths(rec, ['q0', 'quat0', 'quat.w', 'quaternion.w', 'imu.q0', 'imu.quat0', 'imu.quat.w'], Number.NaN);
+  const q1 = toNumberFromPaths(rec, ['q1', 'quat1', 'quat.x', 'quaternion.x', 'imu.q1', 'imu.quat1', 'imu.quat.x'], Number.NaN);
+  const q2 = toNumberFromPaths(rec, ['q2', 'quat2', 'quat.y', 'quaternion.y', 'imu.q2', 'imu.quat2', 'imu.quat.y'], Number.NaN);
+  const q3 = toNumberFromPaths(rec, ['q3', 'quat3', 'quat.z', 'quaternion.z', 'imu.q3', 'imu.quat3', 'imu.quat.z'], Number.NaN);
+
+  if (![q0, q1, q2, q3].every((v) => Number.isFinite(v))) {
+    return null;
+  }
+
+  const norm = Math.sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+  if (!Number.isFinite(norm) || norm < 1e-6) {
+    return null;
+  }
+
+  return {
+    q0: q0 / norm,
+    q1: q1 / norm,
+    q2: q2 / norm,
+    q3: q3 / norm,
+    norm
+  };
+};
+
+const normalizeImuPayload = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const rec = payload as Record<string, unknown>;
+  const q = parseNormalizedQuaternion(rec);
+  if (!q) {
+    return null;
+  }
+
+  const accelX = toNumberFromPaths(rec, ['accelX', 'accel_x', 'ax', 'imu.accelX', 'imu.accel_x', 'imu.ax'], 0);
+  const accelY = toNumberFromPaths(rec, ['accelY', 'accel_y', 'ay', 'imu.accelY', 'imu.accel_y', 'imu.ay'], 0);
+  const accelZ = toNumberFromPaths(rec, ['accelZ', 'accel_z', 'az', 'imu.accelZ', 'imu.accel_z', 'imu.az'], 1);
+  const gyroX = toNumberFromPaths(rec, ['gyroX', 'gyro_x', 'gx', 'imu.gyroX', 'imu.gyro_x', 'imu.gx'], 0);
+  const gyroY = toNumberFromPaths(rec, ['gyroY', 'gyro_y', 'gy', 'imu.gyroY', 'imu.gyro_y', 'imu.gy'], 0);
+  const gyroZ = toNumberFromPaths(rec, ['gyroZ', 'gyro_z', 'gz', 'imu.gyroZ', 'imu.gyro_z', 'imu.gz'], 0);
+  const roll = toNumberFromPaths(rec, ['roll', 'imu.roll'], Number.NaN);
+  const pitch = toNumberFromPaths(rec, ['pitch', 'imu.pitch'], Number.NaN);
+  const yaw = toNumberFromPaths(rec, ['yaw', 'heading', 'imu.yaw'], Number.NaN);
+  const dtMs = toNumberFromPaths(rec, ['dt_ms', 'dtMs', 'imu.dt_ms', 'imu.dtMs'], 40);
+  const stationary = toBooleanFromPaths(rec, ['stationary', 'still', 'imu.stationary', 'imu.still'], false);
+  const mode = typeof rec.mode === 'string' ? rec.mode : typeof rec.filter === 'string' ? rec.filter : undefined;
+  const motionMode = typeof rec.motion_mode === 'string' ? rec.motion_mode : undefined;
+
+  const linAx = toNumberFromPaths(rec, ['lin_ax', 'linAx', 'imu.lin_ax'], 0);
+  const linAy = toNumberFromPaths(rec, ['lin_ay', 'linAy', 'imu.lin_ay'], 0);
+  const linAz = toNumberFromPaths(rec, ['lin_az', 'linAz', 'imu.lin_az'], 0);
+
+  const velX = toNumberFromPaths(rec, ['vel_x', 'velX', 'imu.vel_x'], 0);
+  const velY = toNumberFromPaths(rec, ['vel_y', 'velY', 'imu.vel_y'], 0);
+  const velZ = toNumberFromPaths(rec, ['vel_z', 'velZ', 'imu.vel_z'], 0);
+
+  const posX = toNumberFromPaths(rec, ['pos_x', 'posX', 'imu.pos_x'], 0);
+  const posY = toNumberFromPaths(rec, ['pos_y', 'posY', 'imu.pos_y'], 0);
+  const posZ = toNumberFromPaths(rec, ['pos_z', 'posZ', 'imu.pos_z'], 0);
+
+  const gravX = toNumberFromPaths(rec, ['grav_x', 'gravX', 'imu.grav_x'], 0);
+  const gravY = toNumberFromPaths(rec, ['grav_y', 'gravY', 'imu.grav_y'], 0);
+  const gravZ = toNumberFromPaths(rec, ['grav_z', 'gravZ', 'imu.grav_z'], 1);
+
+  return {
+    q0: q.q0,
+    q1: q.q1,
+    q2: q.q2,
+    q3: q.q3,
+    quaternionNorm: q.norm,
+    imuMode: mode,
+    motionMode,
+    accelX,
+    accelY,
+    accelZ,
+    gyroX,
+    gyroY,
+    gyroZ,
+    dtMs,
+    stationary,
+    linAx,
+    linAy,
+    linAz,
+    velX,
+    velY,
+    velZ,
+    posX,
+    posY,
+    posZ,
+    gravX,
+    gravY,
+    gravZ,
+    roll: Number.isFinite(roll) ? roll : undefined,
+    pitch: Number.isFinite(pitch) ? pitch : undefined,
+    yaw: Number.isFinite(yaw) ? yaw : undefined
+  };
+};
 
 const toEpochMs = (value: unknown, fallback = Date.now()) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -190,6 +350,19 @@ const normalizePayload = (payload: unknown): ESP32Data | null => {
     ? Math.round(clamp(rawReading, 0, 255))
     : Math.round(((100 - clamp(lightPercent, 0, 100)) / 100) * 255);
 
+  const accelX = toNumberFromPaths(rec, ['accelX', 'accel_x', 'ax', 'imu.accelX', 'imu.accel_x', 'imu.ax'], 0);
+  const accelY = toNumberFromPaths(rec, ['accelY', 'accel_y', 'ay', 'imu.accelY', 'imu.accel_y', 'imu.ay'], 0);
+  const accelZ = toNumberFromPaths(rec, ['accelZ', 'accel_z', 'az', 'imu.accelZ', 'imu.accel_z', 'imu.az'], 0);
+  const gyroX = toNumberFromPaths(rec, ['gyroX', 'gyro_x', 'gx', 'imu.gyroX', 'imu.gyro_x', 'imu.gx'], 0);
+  const gyroY = toNumberFromPaths(rec, ['gyroY', 'gyro_y', 'gy', 'imu.gyroY', 'imu.gyro_y', 'imu.gy'], 0);
+  const gyroZ = toNumberFromPaths(rec, ['gyroZ', 'gyro_z', 'gz', 'imu.gyroZ', 'imu.gyro_z', 'imu.gz'], 0);
+  const quaternion = parseNormalizedQuaternion(rec);
+  const roll = toNumberFromPaths(rec, ['roll', 'imu.roll'], Number.NaN);
+  const pitch = toNumberFromPaths(rec, ['pitch', 'imu.pitch'], Number.NaN);
+  const yaw = toNumberFromPaths(rec, ['yaw', 'heading', 'imu.yaw'], Number.NaN);
+  const dtMs = toNumberFromPaths(rec, ['dt_ms', 'dtMs', 'imu.dt_ms', 'imu.dtMs'], 40);
+  const stationary = toBooleanFromPaths(rec, ['stationary', 'still', 'imu.stationary', 'imu.still'], false);
+
   return {
     timestamp: typeof rec.timestamp === 'string' ? rec.timestamp : typeof rec.ts === 'string' ? rec.ts : '',
     recordedAtMs: toEpochMs(rec.created_at ?? rec.timestamp ?? rec.ts, Date.now()),
@@ -210,7 +383,22 @@ const normalizePayload = (payload: unknown): ESP32Data | null => {
     ssid: typeof rec.ssid === 'string' ? rec.ssid : typeof rec.wifi_ssid === 'string' ? rec.wifi_ssid : '--',
     ip: typeof rec.ip === 'string' ? rec.ip : typeof rec.wifi_ip === 'string' ? rec.wifi_ip : '--',
     mac: typeof rec.mac === 'string' ? rec.mac : typeof rec.wifi_mac === 'string' ? rec.wifi_mac : '--',
-    channel: Math.round(toNumber(rec.channel ?? rec.wifi_channel, 0))
+    channel: Math.round(toNumber(rec.channel ?? rec.wifi_channel, 0)),
+    accelX,
+    accelY,
+    accelZ,
+    gyroX,
+    gyroY,
+    gyroZ,
+    dtMs,
+    stationary,
+    q0: quaternion?.q0,
+    q1: quaternion?.q1,
+    q2: quaternion?.q2,
+    q3: quaternion?.q3,
+    roll: Number.isFinite(roll) ? roll : undefined,
+    pitch: Number.isFinite(pitch) ? pitch : undefined,
+    yaw: Number.isFinite(yaw) ? yaw : undefined
   };
 };
 
@@ -297,7 +485,36 @@ const mockData = (t: number): ESP32Data => {
   ssid: 'ESP32-C3-LAB',
   ip: '192.168.1.155',
   mac: '24:6F:28:AB:CD:EF',
-  channel: 6
+  channel: 6,
+  accelX: 0.18 * Math.sin(t / 12),
+  accelY: 0.22 * Math.cos(t / 15),
+  accelZ: 0.92 + 0.08 * Math.sin(t / 10),
+  gyroX: 20 * Math.sin(t / 9),
+  gyroY: 16 * Math.cos(t / 11),
+  gyroZ: 30 * Math.sin(t / 7),
+  dtMs: 40,
+  stationary: false,
+  q0: Math.cos(t / 80),
+  q1: Math.sin(t / 80) * 0.2,
+  q2: Math.sin(t / 95) * 0.2,
+  q3: Math.sin(t / 70) * 0.4,
+  roll: 15 * Math.sin(t / 25),
+  pitch: 12 * Math.cos(t / 28),
+  yaw: (t * 2) % 360
+  ,
+  motionMode: 'relative',
+  linAx: 0.02 * Math.sin(t / 20),
+  linAy: 0.03 * Math.cos(t / 19),
+  linAz: 0.02 * Math.sin(t / 16),
+  velX: 0.2 * Math.sin(t / 30),
+  velY: 0.15 * Math.cos(t / 29),
+  velZ: 0.1 * Math.sin(t / 25),
+  posX: 0.9 * Math.sin(t / 45),
+  posY: -0.7 * Math.cos(t / 42),
+  posZ: 0.5 * Math.sin(t / 40),
+  gravX: 0.01,
+  gravY: 0.02,
+  gravZ: 0.99
   };
 };
 
@@ -309,7 +526,9 @@ const endpoints = [
 ] as const;
 
 let sharedClient: MqttClient | null = null;
+let sharedImuSocket: WebSocket | null = null;
 let sharedReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let sharedImuReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let sharedStaleTimer: ReturnType<typeof setInterval> | null = null;
 let sharedMockTimer: ReturnType<typeof setInterval> | null = null;
 let sharedEndpointIndex = 0;
@@ -319,6 +538,139 @@ let sharedLastRawAtMs = 0;
 let sharedTick = 0;
 let sharedInitialized = false;
 let sharedHistoryLoaded = false;
+let sharedImuFrames = 0;
+let sharedImuWindowStart = 0;
+let sharedLastImuStorePushAt = 0;
+let sharedImuReconnectAttempt = 0;
+
+const validHost = (value: string | undefined) => {
+  if (!value) {
+    return false;
+  }
+  const trimmed = value.trim();
+  return Boolean(trimmed && trimmed !== '--' && trimmed !== '0.0.0.0');
+};
+
+const resolveImuWebSocketUrl = () => {
+  const explicit = IMU_WS_URL.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const ip = getStoreState().data?.ip;
+  if (!validHost(ip)) {
+    return null;
+  }
+
+  return `ws://${ip}:${IMU_WS_PORT}`;
+};
+
+const closeSharedImuSocket = () => {
+  if (!sharedImuSocket) {
+    return;
+  }
+
+  sharedImuSocket.onopen = null;
+  sharedImuSocket.onmessage = null;
+  sharedImuSocket.onerror = null;
+  sharedImuSocket.onclose = null;
+  sharedImuSocket.close();
+  sharedImuSocket = null;
+};
+
+const clearSharedImuReconnect = () => {
+  if (sharedImuReconnectTimer) {
+    clearTimeout(sharedImuReconnectTimer);
+    sharedImuReconnectTimer = null;
+  }
+};
+
+const scheduleSharedImuReconnect = () => {
+  if (sharedImuReconnectTimer) {
+    return;
+  }
+
+  const delay = Math.min(8000, 700 * Math.pow(1.8, sharedImuReconnectAttempt));
+  sharedImuReconnectTimer = setTimeout(() => {
+    sharedImuReconnectTimer = null;
+    sharedImuReconnectAttempt += 1;
+    connectSharedImuSocket();
+  }, delay);
+};
+
+const applyImuFrameToStore = (parsed: unknown, nowMs: number) => {
+  const imu = normalizeImuPayload(parsed);
+  if (!imu) {
+    return;
+  }
+
+  if (!sharedImuWindowStart) {
+    sharedImuWindowStart = nowMs;
+  }
+  sharedImuFrames += 1;
+
+  let imuRateHz: number | undefined;
+  if (nowMs - sharedImuWindowStart >= 1000) {
+    const elapsed = nowMs - sharedImuWindowStart;
+    imuRateHz = (sharedImuFrames * 1000) / elapsed;
+    sharedImuFrames = 0;
+    sharedImuWindowStart = nowMs;
+  }
+
+  sharedLastMessageAt = nowMs;
+  getStoreState().setConnectionStatus('online');
+
+  if (nowMs - sharedLastImuStorePushAt >= 40) {
+    sharedLastImuStorePushAt = nowMs;
+    getStoreState().setImuFrame({
+      ...imu,
+      imuRateHz,
+      recordedAtMs: nowMs,
+      timestamp: extractTimestamp(parsed) ?? format(new Date(nowMs), 'HH:mm:ss.SSS')
+    });
+  }
+};
+
+const connectSharedImuSocket = () => {
+  closeSharedImuSocket();
+
+  const url = resolveImuWebSocketUrl();
+  if (!url) {
+    scheduleSharedImuReconnect();
+    return;
+  }
+
+  try {
+    const socket = new WebSocket(url);
+    sharedImuSocket = socket;
+
+    socket.onopen = () => {
+      clearSharedImuReconnect();
+      sharedImuReconnectAttempt = 0;
+      getStoreState().setConnectionStatus('online');
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(String(event.data));
+        applyImuFrameToStore(parsed, Date.now());
+      } catch {
+        // Ignore malformed JSON and keep socket alive.
+      }
+    };
+
+    socket.onerror = () => {
+      scheduleSharedImuReconnect();
+    };
+
+    socket.onclose = () => {
+      sharedImuSocket = null;
+      scheduleSharedImuReconnect();
+    };
+  } catch {
+    scheduleSharedImuReconnect();
+  }
+};
 
 interface SupabaseReadingRow {
   created_at: string;
@@ -463,7 +815,20 @@ const buildZeroReadingFromStore = (): ESP32Data => {
     ssid: previous?.ssid ?? '--',
     ip: previous?.ip ?? '--',
     mac: previous?.mac ?? '--',
-    channel: previous?.channel ?? 0
+    channel: previous?.channel ?? 0,
+    accelX: previous?.accelX ?? 0,
+    accelY: previous?.accelY ?? 0,
+    accelZ: previous?.accelZ ?? 0,
+    gyroX: previous?.gyroX ?? 0,
+    gyroY: previous?.gyroY ?? 0,
+    gyroZ: previous?.gyroZ ?? 0,
+    q0: previous?.q0,
+    q1: previous?.q1,
+    q2: previous?.q2,
+    q3: previous?.q3,
+    roll: previous?.roll,
+    pitch: previous?.pitch,
+    yaw: previous?.yaw
   };
 };
 
@@ -598,8 +963,37 @@ const connectSharedMQTT = () => {
 
       sharedLastMessageAt = Date.now();
       getStoreState().setConnectionStatus('online');
+      const previous = getStoreState().data;
       const ts = extractTimestamp(parsed) ?? format(now, 'HH:mm:ss.SSS');
-      getStoreState().pushReading(reading, ts);
+      getStoreState().pushReading(
+        {
+          ...reading,
+          q0: previous?.q0,
+          q1: previous?.q1,
+          q2: previous?.q2,
+          q3: previous?.q3,
+          roll: previous?.roll,
+          pitch: previous?.pitch,
+          yaw: previous?.yaw,
+          quaternionNorm: previous?.quaternionNorm,
+          imuRateHz: previous?.imuRateHz,
+          imuMode: previous?.imuMode,
+          motionMode: previous?.motionMode,
+          linAx: previous?.linAx,
+          linAy: previous?.linAy,
+          linAz: previous?.linAz,
+          velX: previous?.velX,
+          velY: previous?.velY,
+          velZ: previous?.velZ,
+          posX: previous?.posX,
+          posY: previous?.posY,
+          posZ: previous?.posZ,
+          gravX: previous?.gravX,
+          gravY: previous?.gravY,
+          gravZ: previous?.gravZ
+        },
+        ts
+      );
 
       // Fallback: if raw topic is missing/delayed, keep serial monitor alive with MQTT data topic lines.
       if (Date.now() - sharedLastRawAtMs > 3000) {
@@ -616,6 +1010,10 @@ const connectSharedMQTT = () => {
             `rssi=${Math.round(reading.rssi)} cpu=${reading.cpu.toFixed(2)} v=${reading.volt.toFixed(3)} i=${reading.current.toFixed(2)} mA`
           ].join(' | ')
         });
+      }
+
+      if (!sharedImuSocket && !sharedImuReconnectTimer) {
+        connectSharedImuSocket();
       }
     } catch {
       // Ignore malformed payloads and keep the stream alive.
@@ -655,6 +1053,7 @@ const ensureSharedConnection = () => {
 
   void loadSupabaseHistory();
   connectSharedMQTT();
+  connectSharedImuSocket();
 
   sharedStaleTimer = setInterval(() => {
     const last = sharedLastMessageAt;

@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Sparkline } from '@/components/Sparkline';
-import { ToggleSwitch } from '@/components/ToggleSwitch';
 import { theme } from '@/constants/theme';
 
 interface Props {
@@ -16,15 +16,38 @@ interface Props {
   enabled: boolean;
   onToggle: (value: boolean) => void;
   onPress?: () => void;
+  cardStyle?: StyleProp<ViewStyle>;
 }
 
-export function DeviceCard({ icon, title, source, value, color, history, enabled, onToggle, onPress }: Props) {
+const hexToRgba = (hex: string, alpha: number) => {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) {
+    return `rgba(148, 163, 184, ${alpha})`;
+  }
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) {
+    return `rgba(148, 163, 184, ${alpha})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+export function DeviceCard({ icon, title, source, value, color, history, enabled, onToggle, onPress, cardStyle }: Props) {
   const [chartWidth, setChartWidth] = useState(108);
   const lastWidthRef = useRef(108);
+  const toneBorder = hexToRgba(color, 0.28);
+  const toneBg = hexToRgba(color, 0.05);
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.card, onPress ? styles.cardInteractive : null, pressed && onPress ? styles.cardPressed : null]}
+      style={({ pressed }) => [
+        styles.card,
+        { borderColor: toneBorder, backgroundColor: toneBg },
+        cardStyle,
+        onPress ? styles.cardInteractive : null,
+        pressed && onPress ? styles.cardPressed : null
+      ]}
       onPress={onPress}
       disabled={!onPress}
     >
@@ -35,7 +58,6 @@ export function DeviceCard({ icon, title, source, value, color, history, enabled
           </View>
           <Text style={styles.title}>{title}</Text>
         </View>
-        <ToggleSwitch value={enabled} onChange={onToggle} />
       </View>
 
       <Text style={styles.value}>{value}</Text>
@@ -73,9 +95,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E6EBF2',
-    borderLeftWidth: 3,
-    borderLeftColor: '#D6DEE8'
+    borderColor: '#E6EBF2'
   },
   cardInteractive: {
     borderColor: '#DCE4F0'
