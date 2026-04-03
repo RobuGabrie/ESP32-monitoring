@@ -1,57 +1,173 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { theme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
-export default function TabsLayout() {
+const NAV_ITEMS = [
+  { route: '/', icon: 'grid-outline' as const, label: 'Dashboard' },
+  { route: '/cube', icon: 'cube-outline' as const, label: '3D Cube' },
+  { route: '/sensors', icon: 'hardware-chip-outline' as const, label: 'Sensors' },
+  { route: '/settings', icon: 'settings-outline' as const, label: 'Settings' }
+] as const;
+
+function Sidebar() {
+  const { theme } = useAppTheme();
+  const pathname = usePathname();
+  const router = useRouter();
+
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#1D4ED8',
-        tabBarInactiveTintColor: '#64748B',
-        tabBarStyle: {
-          height: 64,
-          borderTopWidth: 1,
-          borderTopColor: '#E2E8F0',
-          backgroundColor: theme.colors.card,
-          paddingBottom: 8,
-          paddingTop: 6
-        },
-        tabBarLabelStyle: {
-          fontFamily: theme.font.medium,
-          fontSize: 11
-        }
+    <View
+      style={{
+        width: 60,
+        backgroundColor: theme.colors.surfaceRaised,
+        borderRightWidth: 1,
+        borderRightColor: theme.colors.border,
+        paddingVertical: 20,
+        alignItems: 'center',
+        gap: 8
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          backgroundColor: theme.colors.primary,
+          borderRadius: 10,
+          borderCurve: 'continuous',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 16
+        }}
+      >
+        <Text style={{ fontSize: 16, color: '#fff' }}>⚡</Text>
+      </View>
+
+      {NAV_ITEMS.slice(0, 3).map((item) => {
+        const active = pathname === item.route || (item.route === '/' && pathname === '/index');
+        return (
+          <Pressable
+            key={item.route}
+            onPress={() => router.push(item.route as '/')}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              borderCurve: 'continuous',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: active ? theme.colors.surfaceMuted : 'transparent'
+            }}
+          >
+            <Ionicons
+              name={item.icon}
+              size={20}
+              color={active ? theme.colors.text : theme.colors.muted}
+            />
+          </Pressable>
+        );
+      })}
+
+      <View
+        style={{
+          width: 24,
+          height: 1,
+          backgroundColor: theme.colors.border,
+          marginVertical: 8
         }}
       />
-      <Tabs.Screen
-        name="cube"
-        options={{
-          title: '3D Cube',
-          tabBarIcon: ({ color, size }) => <Ionicons name="cube-outline" size={size} color={color} />
-        }}
-      />
-      <Tabs.Screen
-        name="sensors"
-        options={{
-          title: 'Sensors',
-          tabBarIcon: ({ color, size }) => <Ionicons name="hardware-chip-outline" size={size} color={color} />
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />
-        }}
-      />
-    </Tabs>
+
+      {NAV_ITEMS.slice(3).map((item) => {
+        const active = pathname === item.route;
+        return (
+          <Pressable
+            key={item.route}
+            onPress={() => router.push(item.route as '/')}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              borderCurve: 'continuous',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: active ? theme.colors.surfaceMuted : 'transparent'
+            }}
+          >
+            <Ionicons
+              name={item.icon}
+              size={20}
+              color={active ? theme.colors.text : theme.colors.muted}
+            />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export default function TabsLayout() {
+  const { theme, themeMode } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
+  return (
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background }}>
+      {isDesktop && <Sidebar />}
+      <View style={{ flex: 1 }}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: theme.colors.primary,
+            tabBarInactiveTintColor: theme.colors.muted,
+            tabBarStyle: isDesktop
+              ? { display: 'none' }
+              : {
+                  height: 76,
+                  borderTopWidth: 1,
+                  borderTopColor: theme.colors.border,
+                  backgroundColor: themeMode === 'dark' ? 'rgba(20,20,20,0.95)' : 'rgba(247,236,222,0.96)',
+                  paddingBottom: 24,
+                  paddingTop: 12
+                },
+            tabBarLabelStyle: {
+              fontFamily: theme.font.medium,
+              fontSize: 10
+            },
+            sceneStyle: {
+              backgroundColor: theme.colors.background
+            }
+          }}
+        >
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: 'Dashboard',
+              tabBarIcon: ({ color }) => <Ionicons name="grid-outline" size={22} color={color} />
+            }}
+          />
+          <Tabs.Screen
+            name="cube"
+            options={{
+              title: '3D Cube',
+              tabBarIcon: ({ color }) => <Ionicons name="cube-outline" size={22} color={color} />
+            }}
+          />
+          <Tabs.Screen
+            name="sensors"
+            options={{
+              title: 'Sensors',
+              tabBarIcon: ({ color }) => <Ionicons name="hardware-chip-outline" size={22} color={color} />
+            }}
+          />
+          <Tabs.Screen
+            name="settings"
+            options={{
+              title: 'Settings',
+              tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={22} color={color} />
+            }}
+          />
+        </Tabs>
+      </View>
+    </View>
   );
 }

@@ -158,6 +158,7 @@ const normalizeImuPayload = (payload: unknown) => {
   const yaw = toNumberFromPaths(rec, ['yaw', 'heading', 'imu.yaw'], Number.NaN);
   const dtMs = toNumberFromPaths(rec, ['dt_ms', 'dtMs', 'imu.dt_ms', 'imu.dtMs'], 40);
   const stationary = toBooleanFromPaths(rec, ['stationary', 'still', 'imu.stationary', 'imu.still'], false);
+  const zupt = toBooleanFromPaths(rec, ['zupt', 'imu.zupt'], false);
   const mode = typeof rec.mode === 'string' ? rec.mode : typeof rec.filter === 'string' ? rec.filter : undefined;
   const motionMode = typeof rec.motion_mode === 'string' ? rec.motion_mode : undefined;
 
@@ -192,7 +193,8 @@ const normalizeImuPayload = (payload: unknown) => {
     gyroY,
     gyroZ,
     dtMs,
-    stationary,
+    stationary: stationary || zupt,
+    zupt,
     linAx,
     linAy,
     linAz,
@@ -362,6 +364,7 @@ const normalizePayload = (payload: unknown): ESP32Data | null => {
   const yaw = toNumberFromPaths(rec, ['yaw', 'heading', 'imu.yaw'], Number.NaN);
   const dtMs = toNumberFromPaths(rec, ['dt_ms', 'dtMs', 'imu.dt_ms', 'imu.dtMs'], 40);
   const stationary = toBooleanFromPaths(rec, ['stationary', 'still', 'imu.stationary', 'imu.still'], false);
+  const zupt = toBooleanFromPaths(rec, ['zupt', 'imu.zupt'], false);
 
   return {
     timestamp: typeof rec.timestamp === 'string' ? rec.timestamp : typeof rec.ts === 'string' ? rec.ts : '',
@@ -391,7 +394,8 @@ const normalizePayload = (payload: unknown): ESP32Data | null => {
     gyroY,
     gyroZ,
     dtMs,
-    stationary,
+    stationary: stationary || zupt,
+    zupt,
     q0: quaternion?.q0,
     q1: quaternion?.q1,
     q2: quaternion?.q2,
@@ -462,7 +466,7 @@ const mockData = (t: number): ESP32Data => {
   lightRaw,
   lightPercent,
   light: lightPercent,
-  cpu: 15 + 20 * Math.abs(Math.sin(t / 10)) + random(5),
+  cpu: 10 + 80 * Math.abs(Math.sin(t / 10)) + random(5),
   volt: 3.28 + 0.1 * Math.sin(t / 60),
   current: 80 + 40 * Math.abs(Math.sin(t / 8)) + random(10),
   powerMw: (3.28 + 0.1 * Math.sin(t / 60)) * (80 + 40 * Math.abs(Math.sin(t / 8)) + random(10)),
@@ -494,6 +498,7 @@ const mockData = (t: number): ESP32Data => {
   gyroZ: 30 * Math.sin(t / 7),
   dtMs: 40,
   stationary: false,
+  zupt: false,
   q0: Math.cos(t / 80),
   q1: Math.sin(t / 80) * 0.2,
   q2: Math.sin(t / 95) * 0.2,
@@ -537,11 +542,21 @@ let sharedLastRawTs = '';
 let sharedLastRawAtMs = 0;
 let sharedTick = 0;
 let sharedInitialized = false;
-let sharedHistoryLoaded = false;
+let sharedHistoryLoadedRange: TimeRangeKey | null = null;
+let sharedHistoryLoadingRange: TimeRangeKey | null = null;
 let sharedImuFrames = 0;
 let sharedImuWindowStart = 0;
 let sharedLastImuStorePushAt = 0;
 let sharedImuReconnectAttempt = 0;
+
+const rangeMsMap: Record<Exclude<TimeRangeKey, 'all'>, number> = {
+  '60s': 60 * 1000,
+  '15m': 15 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000
+};
 
 const validHost = (value: string | undefined) => {
   if (!value) {
@@ -740,8 +755,12 @@ const buildHistoryLog = (row: SupabaseReadingRow): IOLogEntry => {
   };
 };
 
-const loadSupabaseHistory = async () => {
-  if (sharedHistoryLoaded || USE_MOCK) {
+const loadSupabaseHistory = async (range: TimeRangeKey) => {
+  if (USE_MOCK) {
+    return;
+  }
+
+  if (sharedHistoryLoadedRange === range || sharedHistoryLoadingRange === range) {
     return;
   }
 
@@ -749,32 +768,43 @@ const loadSupabaseHistory = async () => {
     return;
   }
 
+  sharedHistoryLoadingRange = range;
+
   try {
+    const params: Record<string, string | number> = {
+      select:
+        'created_at,device_ts,uptime_s,temp_c,ldr_raw,ldr_pct,rssi_dbm,cpu_pct,voltage_v,current_ma,power_mw,used_mah,battery_pct,battery_min',
+      order: 'created_at.desc',
+      limit: HISTORY_LIMIT
+    };
+
+    if (range !== 'all') {
+      const cutoffIso = new Date(Date.now() - rangeMsMap[range]).toISOString();
+      params.created_at = `gte.${cutoffIso}`;
+    }
+
     const response = await axios.get<SupabaseReadingRow[]>(`${SUPABASE_URL}/rest/v1/sensor_readings`, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`
       },
-      params: {
-        select:
-          'created_at,device_ts,uptime_s,temp_c,ldr_raw,ldr_pct,rssi_dbm,cpu_pct,voltage_v,current_ma,power_mw,used_mah,battery_pct,battery_min',
-        order: 'created_at.desc',
-        limit: HISTORY_LIMIT
-      }
+      params
     });
 
     const rows = (response.data ?? []).slice().reverse();
     if (!rows.length) {
-      sharedHistoryLoaded = true;
+      sharedHistoryLoadedRange = range;
       return;
     }
 
     const readings = rows.map(buildHistoryEntry);
     const logs = rows.map(buildHistoryLog);
     getStoreState().hydrateHistory(readings, logs);
-    sharedHistoryLoaded = true;
+    sharedHistoryLoadedRange = range;
   } catch {
     // Keep live stream functional even when history API fails.
+  } finally {
+    sharedHistoryLoadingRange = null;
   }
 };
 
@@ -988,6 +1018,7 @@ const connectSharedMQTT = () => {
           posX: previous?.posX,
           posY: previous?.posY,
           posZ: previous?.posZ,
+          zupt: previous?.zupt,
           gravX: previous?.gravX,
           gravY: previous?.gravY,
           gravZ: previous?.gravZ
@@ -1051,7 +1082,7 @@ const ensureSharedConnection = () => {
     return;
   }
 
-  void loadSupabaseHistory();
+  void loadSupabaseHistory(getStoreState().selectedRange);
   connectSharedMQTT();
   connectSharedImuSocket();
 
@@ -1083,6 +1114,7 @@ export const useESP32 = () => {
   const currentHistory = useStore((s) => s.currentHistory);
   const voltHistory = useStore((s) => s.voltHistory);
   const rssiHistory = useStore((s) => s.rssiHistory);
+  const powerHistory = useStore((s) => s.powerHistory);
   const historyTimeline = useStore((s) => s.historyTimeline);
   const status = useStore((s) => s.connectionStatus);
   const selectedRange = useStore((s) => s.selectedRange);
@@ -1097,6 +1129,10 @@ export const useESP32 = () => {
     clientRef.current = sharedClient;
   }, []);
 
+  useEffect(() => {
+    void loadSupabaseHistory(selectedRange);
+  }, [selectedRange]);
+
   const publishCommand = useCallback((command: Record<string, unknown>) => {
     const client = sharedClient ?? clientRef.current;
     if (!client || !client.connected) {
@@ -1106,14 +1142,6 @@ export const useESP32 = () => {
     client.publish(MQTT_CMD_TOPIC, JSON.stringify(command));
     return true;
   }, []);
-
-  const rangeMsMap: Record<Exclude<TimeRangeKey, 'all'>, number> = {
-    '15m': 15 * 60 * 1000,
-    '1h': 60 * 60 * 1000,
-    '6h': 6 * 60 * 60 * 1000,
-    '24h': 24 * 60 * 60 * 1000,
-    '7d': 7 * 24 * 60 * 60 * 1000
-  };
 
   const historyStartIndex = useMemo(() => {
     if (selectedRange === 'all') {
@@ -1133,9 +1161,10 @@ export const useESP32 = () => {
       currentHistory: currentHistory.slice(historyStartIndex),
       voltHistory: voltHistory.slice(historyStartIndex),
       rssiHistory: rssiHistory.slice(historyStartIndex),
+      powerHistory: powerHistory.slice(historyStartIndex),
       timeline: historyTimeline.slice(historyStartIndex)
     }),
-    [tempHistory, lightHistory, cpuHistory, currentHistory, voltHistory, rssiHistory, historyTimeline, historyStartIndex]
+    [tempHistory, lightHistory, cpuHistory, currentHistory, voltHistory, rssiHistory, powerHistory, historyTimeline, historyStartIndex]
   );
 
   const filteredLog = useMemo(() => {

@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface Props {
   rssi: number | string | null | undefined;
@@ -40,6 +42,8 @@ const labelFromLevel = (level: number) => {
 };
 
 export function SignalBars({ rssi, embedded = false }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const safeRssi = toSafeRssi(rssi);
   const level = levelFromRssi(rssi);
   const levelLabel = labelFromLevel(level);
@@ -48,7 +52,7 @@ export function SignalBars({ rssi, embedded = false }: Props) {
     <View style={[styles.wrap, embedded ? styles.wrapEmbedded : null]}>
       <View style={styles.barsRow}>
         {[1, 2, 3, 4].map((n) => (
-          <Bar key={n} index={n} level={level} withRightSpacing={n < 4} />
+          <Bar key={n} index={n} level={level} withRightSpacing={n < 4} styles={styles} />
         ))}
       </View>
       <View style={styles.labelWrap}>
@@ -62,7 +66,17 @@ export function SignalBars({ rssi, embedded = false }: Props) {
   );
 }
 
-function Bar({ index, level, withRightSpacing }: { index: number; level: number; withRightSpacing: boolean }) {
+function Bar({
+  index,
+  level,
+  withRightSpacing,
+  styles
+}: {
+  index: number;
+  level: number;
+  withRightSpacing: boolean;
+  styles: ReturnType<typeof createStyles>;
+}) {
   return (
     <View
       style={[
@@ -75,15 +89,15 @@ function Bar({ index, level, withRightSpacing }: { index: number; level: number;
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   wrap: {
     backgroundColor: theme.colors.card,
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E6EBF2',
+    borderColor: theme.colors.border,
     borderLeftWidth: 3,
-    borderLeftColor: '#D1FAE5',
+    borderLeftColor: 'rgba(61,220,132,0.3)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -93,8 +107,8 @@ const styles = StyleSheet.create({
   wrapEmbedded: {
     marginBottom: 0,
     borderLeftWidth: 1,
-    borderLeftColor: '#DCE4F0',
-    backgroundColor: '#F8FAFC'
+    borderLeftColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted
   },
   barsRow: {
     flexDirection: 'row',
@@ -117,14 +131,14 @@ const styles = StyleSheet.create({
   levelPill: {
     marginTop: 4,
     borderRadius: 999,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: 'rgba(61,220,132,0.12)',
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: 'rgba(61,220,132,0.3)',
     paddingHorizontal: 9,
     paddingVertical: 3
   },
   levelPillText: {
-    color: '#065F46',
+    color: '#3ddc84',
     fontFamily: theme.font.semiBold,
     fontSize: 11
   },
@@ -136,9 +150,9 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   barOn: {
-    backgroundColor: '#22C55E'
+    backgroundColor: '#3ddc84'
   },
   barOff: {
-    backgroundColor: '#D1D5DB'
+    backgroundColor: '#333333'
   }
 });

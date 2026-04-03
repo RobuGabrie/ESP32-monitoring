@@ -3,7 +3,8 @@ import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'r
 import { Circle, Defs, Line, LinearGradient, Path, Stop, Svg } from 'react-native-svg';
 import { format as formatDate } from 'date-fns';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface Props {
   data: number[];
@@ -11,6 +12,7 @@ interface Props {
   label: (v: number) => string;
   height?: number;
   title?: string;
+  subtitle?: string;
   minValue?: number;
   maxValue?: number;
   yTickCount?: number;
@@ -81,6 +83,7 @@ export function FullChart({
   label,
   height = 220,
   title,
+  subtitle,
   minValue,
   maxValue,
   yTickCount = 6,
@@ -90,6 +93,8 @@ export function FullChart({
   showEventMarker = false,
   eventDeltaThreshold
 }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { width: windowWidth } = useWindowDimensions();
   const values = useMemo(() => {
     if (!data.length) {
@@ -290,13 +295,23 @@ export function FullChart({
   }, [eventDeltaThreshold, lastPoint, latestValue, range, showEventMarker, values]);
 
   return (
-    <View style={[styles.card, { height }]}> 
+    <View style={[styles.card, { minHeight: height }]}> 
       {title ? <Text style={styles.title}>{title}</Text> : null}
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {showLegend && chartStats ? (
-        <View style={styles.legendRow}>
-          <Text style={styles.legendText}>Min: {label(chartStats.minV)}</Text>
-          <Text style={styles.legendText}>Max: {label(chartStats.maxV)}</Text>
-          <Text style={styles.legendText}>Acum: {label(latestValue)}</Text>
+        <View style={styles.statsFooter}>
+          <View style={styles.statCell}>
+            <Text style={styles.statCellLabel}>Curent</Text>
+            <Text style={styles.statCellVal}>{label(latestValue)}</Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellBorder]}>
+            <Text style={styles.statCellLabel}>Medie</Text>
+            <Text style={styles.statCellVal}>{label((chartStats.minV + chartStats.maxV) / 2)}</Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellBorder]}>
+            <Text style={styles.statCellLabel}>Max</Text>
+            <Text style={styles.statCellVal}>{label(chartStats.maxV)}</Text>
+          </View>
         </View>
       ) : null}
       <Animated.View
@@ -403,11 +418,11 @@ export function FullChart({
               {
                 left: Math.max(leftPad + 4, Math.min(lastPoint.x - 58, chartWidth - 128)),
                 top: Math.max(topPad + 2, lastPoint.y + 8),
-                backgroundColor: eventMarker.delta < 0 ? '#FEF3C7' : '#E0F2FE'
+                backgroundColor: eventMarker.delta < 0 ? 'rgba(245,158,11,0.15)' : 'rgba(56,189,248,0.15)'
               }
             ]}
           >
-            <Text style={[styles.eventPillText, { color: eventMarker.delta < 0 ? '#92400E' : '#0C4A6E' }]}>{eventMarker.label}</Text>
+            <Text style={[styles.eventPillText, { color: eventMarker.delta < 0 ? '#F59E0B' : '#38BDF8' }]}>{eventMarker.label}</Text>
           </View>
         ) : null}
 
@@ -440,49 +455,65 @@ export function FullChart({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   card: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     paddingTop: 8,
     paddingHorizontal: 12,
-    marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: '#E6EBF2',
-    overflow: 'hidden',
-    borderLeftWidth: 3,
-    borderLeftColor: '#E2E8F0'
+    borderColor: theme.colors.border,
+    overflow: 'hidden'
   },
   title: {
     marginTop: 10,
     marginLeft: 2,
     color: theme.colors.text,
-    fontSize: 16,
-    fontFamily: theme.font.semiBold
+    fontSize: 18,
+    fontFamily: theme.font.bold
+  },
+  subtitle: {
+    marginTop: 3,
+    marginLeft: 2,
+    color: theme.colors.textSoft,
+    fontSize: 13,
+    fontFamily: theme.font.medium
   },
   chartWrap: {
     marginTop: 6,
     marginBottom: 8
   },
-  legendRow: {
+  statsFooter: {
     marginTop: 8,
     marginBottom: 4,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    paddingTop: 10
   },
-  legendText: {
-    fontSize: 10,
+  statCell: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  statCellBorder: {
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border
+  },
+  statCellLabel: {
+    fontSize: 11,
     color: theme.colors.textSoft,
-    fontFamily: theme.font.medium
+    fontFamily: theme.font.medium,
+    marginBottom: 4
+  },
+  statCellVal: {
+    fontSize: 17,
+    color: theme.colors.text,
+    fontFamily: theme.font.mono,
+    fontWeight: '700'
   },
   valuePill: {
     position: 'absolute',
-    backgroundColor: '#0F172A',
+    backgroundColor: theme.colors.logBg,
     borderRadius: 999,
     paddingHorizontal: 7,
     paddingVertical: 4

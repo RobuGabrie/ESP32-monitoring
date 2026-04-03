@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,7 +7,8 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { ScreenShell } from '@/components/ScreenShell';
 import { TabHero } from '@/components/TabHero';
 import { StatusSummaryCard } from '@/components/StatusSummaryCard';
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
 
 type SensorCard = {
@@ -29,7 +31,9 @@ const getSignalTone = (value: number) => {
 };
 
 export default function SensorsScreen() {
-  const { ioLog, status, data } = useESP32();
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { ioLog, status, data, selectedRange, setTimeRange } = useESP32();
   const entries = ioLog.filter((entry) => entry.rawText || Object.keys(entry.gpio ?? {}).length > 0 || Object.keys(entry.pcf8591Raw ?? {}).length > 0 || Object.keys(entry.ina219Raw ?? {}).length > 0);
   const latest = [...entries].reverse().find((entry) => Object.keys(entry.gpio ?? {}).length > 0 || Object.keys(entry.pcf8591Raw ?? {}).length > 0 || Object.keys(entry.ina219Raw ?? {}).length > 0);
   const gpioValues = Object.values(latest?.gpio ?? {});
@@ -40,21 +44,14 @@ export default function SensorsScreen() {
       label: 'Temperatura',
       value: data ? `${data.temp.toFixed(1)} °C` : '--',
       icon: 'thermometer-outline',
-      accent: '#DBEAFE'
-    },
-    {
-      key: 'light',
-      label: 'Lumina',
-      value: data ? `${(data.lightPercent ?? data.light).toFixed(1)} %` : '--',
-      icon: 'sunny-outline',
-      accent: '#E2E8F0'
+      accent: 'rgba(232,84,42,0.15)'
     },
     {
       key: 'gpio',
       label: 'GPIO active',
       value: latest ? String(activeCount) : '--',
       icon: 'hardware-chip-outline',
-      accent: '#DCFCE7'
+      accent: 'rgba(61,220,132,0.15)'
     }
   ];
   const recentEntries = [...entries].reverse().slice(0, 6);
@@ -64,7 +61,13 @@ export default function SensorsScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenShell contentStyle={styles.pageShell}>
+        <ScreenShell
+          contentStyle={styles.pageShell}
+          screenTitle="Senzori / I/O"
+          screenSubtitle="Monitorizare live GPIO si senzori analogici"
+          selectedRange={selectedRange}
+          onRangeChange={setTimeRange}
+        >
           <TabHero
             title="Senzori / I/O"
             subtitle="Monitorizare live pentru GPIO si senzori analogici, intr-un layout compact si usor de scanat."
@@ -86,7 +89,7 @@ export default function SensorsScreen() {
                   value={item.value}
                   icon={item.icon}
                   accent={item.accent}
-                  iconColor="#334155"
+                  iconColor={theme.colors.text}
                   style={styles.metricCard}
                 />
               ))}
@@ -153,7 +156,7 @@ export default function SensorsScreen() {
                 <View style={styles.entryCard} key={`${entry.ts}-${index}`}>
                   <View style={styles.entryHead}>
                     <View style={styles.entryBadge}>
-                      <Ionicons name="radio-outline" size={13} color="#1E40AF" />
+                      <Ionicons name="radio-outline" size={13} color={theme.colors.primary} />
                       <Text style={styles.entryBadgeText}>{entry.source === 'history' ? 'HISTORY' : 'LIVE'}</Text>
                     </View>
                     <Text style={styles.entryTs}>{entry.ts}</Text>
@@ -196,7 +199,7 @@ export default function SensorsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 112 },
   pageShell: {
@@ -205,10 +208,10 @@ const styles = StyleSheet.create({
     paddingBottom: 0
   },
   panel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#DFE7F0',
+    borderColor: theme.colors.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
@@ -252,21 +255,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#8C9AAD'
   },
   gpioCardHigh: {
-    backgroundColor: '#EEF7F2',
-    borderColor: '#CFE2D6'
+    backgroundColor: 'rgba(61,220,132,0.08)',
+    borderColor: 'rgba(61,220,132,0.2)'
   },
   gpioCardLow: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E1E7EF'
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border
   },
   gpioLabel: {
-    color: '#475569',
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 11
   },
   gpioValue: {
     marginTop: 3,
-    color: '#0F172A',
+    color: theme.colors.text,
     fontFamily: theme.font.bold,
     fontSize: 28,
     lineHeight: 33
@@ -277,17 +280,17 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   gpioStateHigh: {
-    color: '#2E6D57'
+    color: '#3ddc84'
   },
   gpioStateLow: {
-    color: '#475569'
+    color: theme.colors.textSoft
   },
   sensorGroup: {
     gap: 8,
     marginTop: 4
   },
   sensorBlockTitle: {
-    color: '#334A64',
+    color: theme.colors.textSoft,
     fontFamily: theme.font.semiBold,
     fontSize: 13,
     marginBottom: 2
@@ -298,22 +301,22 @@ const styles = StyleSheet.create({
     gap: 7
   },
   sensorChip: {
-    backgroundColor: '#F2F5FA',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: '#D8E0EC',
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     paddingVertical: 9,
     minWidth: 92
   },
   sensorChipKey: {
-    color: '#5B6B84',
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 10
   },
   sensorChipValue: {
     marginTop: 1,
-    color: '#111827',
+    color: theme.colors.text,
     fontFamily: theme.font.bold,
     fontSize: 18
   },
@@ -322,10 +325,10 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   entryCard: {
-    backgroundColor: '#FAFCFF',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D4E1F0',
+    borderColor: theme.colors.border,
     padding: 12,
     gap: 8
   },
@@ -342,22 +345,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: '#F1F4FA',
+    backgroundColor: theme.colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#D6E0EE'
+    borderColor: theme.colors.border
   },
   entryBadgeText: {
-    color: '#36527B',
+    color: theme.colors.primary,
     fontFamily: theme.font.semiBold,
     fontSize: 11
   },
   entryTs: {
-    color: '#475569',
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 12
   },
   rawText: {
-    color: '#0F172A',
+    color: theme.colors.text,
     fontFamily: 'JetBrainsMono_400Regular',
     fontSize: 14,
     lineHeight: 20
@@ -365,36 +368,36 @@ const styles = StyleSheet.create({
   kvRow: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E2E8EF',
-    backgroundColor: '#F7F9FC',
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceAlt,
     paddingHorizontal: 8,
     paddingVertical: 7,
     gap: 4
   },
   dataLabel: {
-    color: '#64748B',
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 11,
     textTransform: 'uppercase'
   },
   dataValue: {
-    color: '#111827',
+    color: theme.colors.text,
     fontFamily: 'JetBrainsMono_400Regular',
     fontSize: 14,
     lineHeight: 19
   },
   emptyCard: {
-    backgroundColor: '#F8FBFF',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DEE8F3',
+    borderColor: theme.colors.border,
     padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8
   },
   emptyText: {
-    color: '#475569',
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 14
   }

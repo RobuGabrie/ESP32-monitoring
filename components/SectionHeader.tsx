@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface Props {
   title: string;
@@ -11,6 +13,8 @@ interface Props {
 }
 
 export function SectionHeader({ title, count, countLabel, actionLabel = 'Export', onActionPress }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const countText = countLabel ? `${count} ${countLabel}` : String(count);
 
   return (
@@ -30,7 +34,7 @@ export function SectionHeader({ title, count, countLabel, actionLabel = 'Export'
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -65,9 +69,9 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     minHeight: theme.touch.minTarget,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.accents.primary,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: theme.colors.border,
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -77,7 +81,7 @@ const styles = StyleSheet.create({
     opacity: 0.92
   },
   actionText: {
-    color: '#1D4ED8',
+    color: theme.colors.primary,
     fontFamily: theme.font.semiBold,
     fontSize: 13
   }

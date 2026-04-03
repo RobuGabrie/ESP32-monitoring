@@ -1,40 +1,154 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 
-import { IMUCube } from '@/components/IMUCube';
 import { IMU_WS_PORT, IMU_WS_URL } from '@/constants/config';
+import { IMUCubeLite } from '@/components/IMUCubeLite';
 import { theme } from '@/constants/theme';
 import { useImuQuaternion } from '../../hooks/useImuQuaternion';
-import { useESP32 } from '@/hooks/useESP32';
+import { useStore } from '@/hooks/useStore';
 
 export default function CubeScreen() {
-  const { data, status } = useESP32();
-  const wsUrl = data?.ip && data.ip !== '--' ? `ws://${data.ip}:${IMU_WS_PORT}` : IMU_WS_URL;
+  const { width } = useWindowDimensions();
+  const isFocused = useIsFocused();
+  const isMobileView = Platform.OS !== 'web' && width < 900;
+  const [IMUCubeComponent, setIMUCubeComponent] = useState<typeof import('../../components/IMUCube').IMUCube | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    import('../../components/IMUCube')
+      .then((module) => {
+        if (mounted) {
+          setIMUCubeComponent(() => module.IMUCube);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setIMUCubeComponent(null);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const deviceIp = useStore((s) => s.data?.ip);
+  const status = useStore((s) => s.connectionStatus);
+  const [displayAccel, setDisplayAccel] = useState({ x: 0, y: 0, z: 0 });
+  const accelTargetRef = useRef({ x: 0, y: 0, z: 0 });
+  const accelWarmupRef = useRef(0);
+  const wsUrl = deviceIp && deviceIp !== '--' ? `ws://${deviceIp}:${IMU_WS_PORT}` : IMU_WS_URL;
   const {
     quaternionRef,
+    filteredEulerRef,
+    rawFrameRef,
     motionRef,
     connectionStatus,
+    recalibrateOrientation,
     recenterPosition,
-    recenterYaw,
-    resetFilters,
-    setFrozen,
-    isFrozen,
-    statsRef
-  } = useImuQuaternion(wsUrl);
+    setAxisMapping
+  } = useImuQuaternion(isFocused ? wsUrl : '');
   const [sceneMode, setSceneMode] = useState<'light' | 'immersive'>('light');
+
+  const toFinite = (value: unknown) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    setAxisMapping({ swapXY: true, swapYZ: true });
+    recalibrateOrientation();
+    recenterPosition();
+  }, [recalibrateOrientation, recenterPosition, setAxisMapping]);
+
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      accelWarmupRef.current = 0;
+    }
+  }, [connectionStatus]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setDisplayAccel({ x: 0, y: 0, z: 0 });
+      return undefined;
+    }
+
+    const readLiveAcceleration = () => {
+      const frame = rawFrameRef.current;
+      const imu = (frame?.imu && typeof frame.imu === 'object' ? frame.imu : frame) as Record<string, unknown> | null;
+
+      if (imu) {
+        const x = toFinite(imu.lin_ax) ?? toFinite(imu.linAx) ?? toFinite(imu.ax);
+        const y = toFinite(imu.lin_ay) ?? toFinite(imu.linAy) ?? toFinite(imu.ay);
+        const z = toFinite(imu.lin_az) ?? toFinite(imu.linAz) ?? toFinite(imu.az);
+        if (x !== null && y !== null && z !== null) {
+          return { x, y, z };
+        }
+      }
+
+      return {
+        x: 0,
+        y: 0,
+        z: 0
+      };
+    };
+
+    const timer = setInterval(() => {
+      if (accelWarmupRef.current < 6) {
+        accelWarmupRef.current += 1;
+        setDisplayAccel({ x: 0, y: 0, z: 0 });
+        return;
+      }
+      accelTargetRef.current = readLiveAcceleration();
+      setDisplayAccel((prev) => ({
+        x: prev.x + (accelTargetRef.current.x - prev.x) * 0.52,
+        y: prev.y + (accelTargetRef.current.y - prev.y) * 0.52,
+        z: prev.z + (accelTargetRef.current.z - prev.z) * 0.52
+      }));
+    }, 120);
+
+    return () => clearInterval(timer);
+  }, [isFocused, rawFrameRef]);
 
   return (
     <SafeAreaView style={sceneMode === 'immersive' ? styles.safeImmersive : styles.safeLight}>
       <View style={styles.stage}>
-        <IMUCube
-          key={sceneMode}
-          showHud={false}
-          imuQRef={quaternionRef}
-          imuMotionRef={motionRef}
-          themeMode={sceneMode}
-        />
+        {isFocused && IMUCubeComponent ? (
+          <IMUCubeComponent
+            key={sceneMode}
+            showHud={false}
+            imuQRef={quaternionRef}
+            imuMotionRef={motionRef}
+            themeMode={sceneMode}
+            mobileView={isMobileView}
+          />
+        ) : isFocused ? (
+          <>
+            <IMUCubeLite imuQRef={quaternionRef} imuMotionRef={motionRef} themeMode={sceneMode} mobileView={isMobileView} />
+            <View style={styles.glUnavailableCard}>
+              <Ionicons name="information-circle-outline" size={18} color="#1E3A8A" />
+              <Text style={styles.glUnavailableTitle}>Mod compatibil Expo Go</Text>
+              <Text style={styles.glUnavailableText}>Randare 3D software activa. Pentru varianta GL completa foloseste EAS Build.</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.pausedCard}>
+            <Ionicons name="pause-circle-outline" size={20} color="#1E3A8A" />
+            <Text style={styles.pausedTitle}>Vizualizare IMU in pauza</Text>
+            <Text style={styles.pausedText}>Tab-ul nu este activ, randarea 3D si fluxul IMU sunt suspendate.</Text>
+          </View>
+        )}
 
         <View style={styles.topOverlay}>
           <View style={sceneMode === 'immersive' ? styles.titleChipImmersive : styles.titleChipLight}>
@@ -57,31 +171,22 @@ export default function CubeScreen() {
         </View>
 
         <View style={styles.rightOverlay}>
-          <HudValue label="Roll" value={`${(data?.roll ?? 0).toFixed(1)}°`} mode={sceneMode} />
-          <HudValue label="Pitch" value={`${(data?.pitch ?? 0).toFixed(1)}°`} mode={sceneMode} />
-          <HudValue label="Yaw" value={`${(data?.yaw ?? 0).toFixed(1)}°`} mode={sceneMode} />
+          <HudValue label="Roll" value={`${(filteredEulerRef.current.roll ?? 0).toFixed(1)}°`} mode={sceneMode} />
+          <HudValue label="Pitch" value={`${(filteredEulerRef.current.pitch ?? 0).toFixed(1)}°`} mode={sceneMode} />
+          <HudValue label="Yaw" value={`${(filteredEulerRef.current.yaw ?? 0).toFixed(1)}°`} mode={sceneMode} />
         </View>
 
         <View style={sceneMode === 'immersive' ? styles.bottomOverlayImmersive : styles.bottomOverlayLight}>
-          <Text style={sceneMode === 'immersive' ? styles.bottomLineImmersive : styles.bottomLineLight}>{`Rata ${statsRef.current.hz.toFixed(0)} Hz • dt ${Math.round(data?.dtMs ?? 0)} ms • q ${(data?.quaternionNorm ?? 0).toFixed(3)}`}</Text>
-          <Text style={sceneMode === 'immersive' ? styles.bottomLineSoftImmersive : styles.bottomLineSoftLight}>{`LinAcc X ${(data?.linAx ?? 0).toFixed(2)} | Y ${(data?.linAy ?? 0).toFixed(2)} | Z ${(data?.linAz ?? 0).toFixed(2)} m/s²`}</Text>
-          <Text style={sceneMode === 'immersive' ? styles.bottomLineSoftImmersive : styles.bottomLineSoftLight}>{`Age ${Math.round(statsRef.current.frameAgeMs)} ms • jitter ${statsRef.current.jitterMs.toFixed(1)} ms • outliers ${statsRef.current.outliers}`}</Text>
+          <View style={sceneMode === 'immersive' ? styles.accelCardImmersive : styles.accelCardLight}>
+            <Text style={sceneMode === 'immersive' ? styles.bottomAccelImmersive : styles.bottomAccelLight}>
+              {`Acceleratie  X ${displayAccel.x.toFixed(2)}  Y ${displayAccel.y.toFixed(2)}  Z ${displayAccel.z.toFixed(2)} m/s²`}
+            </Text>
+          </View>
           <View style={styles.bottomActionsRow}>
             <Text style={sceneMode === 'immersive' ? styles.bottomStatusHintImmersive : styles.bottomStatusHintLight}>{`ESP32: ${status}`}</Text>
             <Pressable style={sceneMode === 'immersive' ? styles.recenterButtonImmersive : styles.recenterButtonLight} onPress={recenterPosition}>
               <Ionicons name="locate-outline" size={13} color={sceneMode === 'immersive' ? '#DBEAFE' : '#1E3A8A'} />
               <Text style={sceneMode === 'immersive' ? styles.recenterTextImmersive : styles.recenterTextLight}>Recenter</Text>
-            </Pressable>
-          </View>
-          <View style={styles.toolsRow}>
-            <Pressable style={sceneMode === 'immersive' ? styles.toolButtonImmersive : styles.toolButtonLight} onPress={recenterYaw}>
-              <Text style={sceneMode === 'immersive' ? styles.toolTextImmersive : styles.toolTextLight}>Recenter yaw</Text>
-            </Pressable>
-            <Pressable style={sceneMode === 'immersive' ? styles.toolButtonImmersive : styles.toolButtonLight} onPress={() => setFrozen(!isFrozen.current)}>
-              <Text style={sceneMode === 'immersive' ? styles.toolTextImmersive : styles.toolTextLight}>{isFrozen.current ? 'Unfreeze' : 'Freeze'}</Text>
-            </Pressable>
-            <Pressable style={sceneMode === 'immersive' ? styles.toolButtonImmersive : styles.toolButtonLight} onPress={resetFilters}>
-              <Text style={sceneMode === 'immersive' ? styles.toolTextImmersive : styles.toolTextLight}>Reset filtre</Text>
             </Pressable>
           </View>
         </View>
@@ -104,7 +209,60 @@ const styles = StyleSheet.create({
   safeImmersive: { flex: 1, backgroundColor: '#030712' },
   stage: {
     flex: 1,
-    backgroundColor: 'transparent'
+    backgroundColor: 'transparent',
+    position: 'relative'
+  },
+  glUnavailableCard: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    top: 92,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#C6D8EE',
+    backgroundColor: 'rgba(239,246,255,0.94)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 4,
+    zIndex: 5,
+    elevation: 5
+  },
+  glUnavailableTitle: {
+    color: '#1E3A8A',
+    fontFamily: theme.font.semiBold,
+    fontSize: 13
+  },
+  glUnavailableText: {
+    color: '#334155',
+    fontFamily: theme.font.medium,
+    fontSize: 11,
+    lineHeight: 16
+  },
+  pausedCard: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    top: 92,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#C6D8EE',
+    backgroundColor: 'rgba(239,246,255,0.94)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+    zIndex: 5,
+    elevation: 5
+  },
+  pausedTitle: {
+    color: '#1E3A8A',
+    fontFamily: theme.font.semiBold,
+    fontSize: 13
+  },
+  pausedText: {
+    color: '#334155',
+    fontFamily: theme.font.medium,
+    fontSize: 11,
+    lineHeight: 16
   },
   topOverlay: {
     position: 'absolute',
@@ -113,7 +271,9 @@ const styles = StyleSheet.create({
     right: theme.spacing.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    zIndex: 4,
+    elevation: 4
   },
   titleChipLight: {
     flexDirection: 'row',
@@ -215,7 +375,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: theme.spacing.sm,
     top: 72,
-    gap: 8
+    gap: 8,
+    zIndex: 4,
+    elevation: 4
   },
   hudValueCardLight: {
     minWidth: 96,
@@ -269,7 +431,9 @@ const styles = StyleSheet.create({
     borderColor: '#CEDCED',
     backgroundColor: 'rgba(255,255,255,0.9)',
     paddingHorizontal: 12,
-    paddingVertical: 10
+    paddingVertical: 10,
+    zIndex: 4,
+    elevation: 4
   },
   bottomOverlayImmersive: {
     position: 'absolute',
@@ -281,35 +445,43 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(148,163,184,0.26)',
     backgroundColor: 'rgba(2,6,23,0.58)',
     paddingHorizontal: 12,
-    paddingVertical: 10
-  },
-  bottomLineLight: {
-    color: '#1E3A8A',
-    fontFamily: theme.font.semiBold,
-    fontSize: 12
-  },
-  bottomLineImmersive: {
-    color: '#DBEAFE',
-    fontFamily: theme.font.semiBold,
-    fontSize: 12
-  },
-  bottomLineSoftLight: {
-    marginTop: 4,
-    color: '#64748B',
-    fontFamily: theme.font.medium,
-    fontSize: 11
-  },
-  bottomLineSoftImmersive: {
-    marginTop: 4,
-    color: '#94A3B8',
-    fontFamily: theme.font.medium,
-    fontSize: 11
+    paddingVertical: 10,
+    zIndex: 4,
+    elevation: 4
   },
   bottomActionsRow: {
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between'
+  },
+  bottomAccelLight: {
+    color: '#1E3A8A',
+    fontFamily: theme.font.semiBold,
+    fontSize: 16,
+    letterSpacing: 0.2
+  },
+  bottomAccelImmersive: {
+    color: '#DBEAFE',
+    fontFamily: theme.font.semiBold,
+    fontSize: 16,
+    letterSpacing: 0.2
+  },
+  accelCardLight: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C6D8EE',
+    backgroundColor: 'rgba(230,239,251,0.92)',
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  accelCardImmersive: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(147,197,253,0.28)',
+    backgroundColor: 'rgba(30,58,138,0.26)',
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   bottomStatusHintLight: {
     color: '#64748B',
@@ -351,37 +523,6 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   recenterTextImmersive: {
-    color: '#DBEAFE',
-    fontFamily: theme.font.semiBold,
-    fontSize: 11
-  },
-  toolsRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    gap: 8
-  },
-  toolButtonLight: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#C6D8EE',
-    backgroundColor: '#F1F6FD',
-    paddingHorizontal: 8,
-    paddingVertical: 6
-  },
-  toolButtonImmersive: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(147,197,253,0.35)',
-    backgroundColor: 'rgba(10,18,38,0.55)',
-    paddingHorizontal: 8,
-    paddingVertical: 6
-  },
-  toolTextLight: {
-    color: '#1E3A8A',
-    fontFamily: theme.font.semiBold,
-    fontSize: 11
-  },
-  toolTextImmersive: {
     color: '#DBEAFE',
     fontFamily: theme.font.semiBold,
     fontSize: 11

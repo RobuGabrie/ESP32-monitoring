@@ -1,12 +1,16 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface Props {
   percent: number;
 }
 
 export function BatteryBar({ percent }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const value = Math.max(0, Math.min(100, percent));
   const color = value > 50 ? '#16A34A' : value > 20 ? '#D97706' : '#DC2626';
   const label = value > 70 ? 'Nivel bun' : value > 35 ? 'Nivel mediu' : 'Nivel scazut';
@@ -28,14 +32,14 @@ export function BatteryBar({ percent }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   wrap: {
     marginTop: 6,
     marginBottom: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     paddingVertical: 10
   },
@@ -59,7 +63,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 14,
     borderRadius: 999,
-    backgroundColor: '#E5EAF1',
+    backgroundColor: theme.colors.border,
     overflow: 'hidden'
   },
   fill: {
@@ -73,7 +77,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between'
   },
   metaText: {
-    color: '#64748B',
+    color: theme.colors.muted,
     fontFamily: theme.font.medium,
     fontSize: 11
   }

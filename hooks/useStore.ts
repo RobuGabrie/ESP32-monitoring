@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
+import { ThemeMode } from '@/constants/theme';
+
 export interface ESP32Data {
   timestamp: string;
   recordedAtMs?: number;
@@ -30,6 +32,7 @@ export interface ESP32Data {
   gyroZ?: number;
   dtMs?: number;
   stationary?: boolean;
+  zupt?: boolean;
   q0?: number;
   q1?: number;
   q2?: number;
@@ -57,7 +60,7 @@ export interface ESP32Data {
 
 export type ConnectionStatus = 'online' | 'offline';
 export type ModuleName = 'temperature' | 'light' | 'cpu' | 'current';
-export type TimeRangeKey = '15m' | '1h' | '6h' | '24h' | '7d' | 'all';
+export type TimeRangeKey = '60s' | '15m' | '1h' | '6h' | '24h' | '7d' | 'all';
 
 export interface ModuleStates {
   temperature: boolean;
@@ -79,8 +82,28 @@ export interface IOLogEntry {
   rawText?: string;
 }
 
-const cap = (arr: number[], next: number, max = 5000) => [...arr, next].slice(-max);
-const capLog = (arr: IOLogEntry[], next: IOLogEntry, max = 1500) => [...arr, next].slice(-max);
+const HISTORY_CAP = 2000;
+const LOG_CAP = 1200;
+
+const cap = (arr: number[], next: number, max = HISTORY_CAP) => {
+  if (arr.length < max) {
+    return arr.concat(next);
+  }
+
+  const out = arr.slice(1);
+  out.push(next);
+  return out;
+};
+
+const capLog = (arr: IOLogEntry[], next: IOLogEntry, max = LOG_CAP) => {
+  if (arr.length < max) {
+    return arr.concat(next);
+  }
+
+  const out = arr.slice(1);
+  out.push(next);
+  return out;
+};
 
 interface StoreState {
   data: ESP32Data | null;
@@ -90,18 +113,22 @@ interface StoreState {
   currentHistory: number[];
   voltHistory: number[];
   rssiHistory: number[];
+  powerHistory: number[];
   historyTimeline: number[];
   totalCurrentMah: number;
   peakCurrent: number;
   moduleStates: ModuleStates;
   connectionStatus: ConnectionStatus;
   selectedRange: TimeRangeKey;
+  themeMode: ThemeMode;
   ioLog: IOLogEntry[];
   pushReading: (data: ESP32Data, ts: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setModuleState: (module: ModuleName, enabled: boolean) => void;
   setModuleStates: (states: Partial<ModuleStates>) => void;
   setTimeRange: (range: TimeRangeKey) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  toggleThemeMode: () => void;
   addLog: (entry: IOLogEntry) => void;
   setImuFrame: (frame: Partial<ESP32Data>) => void;
   hydrateHistory: (readings: ESP32Data[], logs: IOLogEntry[]) => void;
@@ -110,7 +137,17 @@ interface StoreState {
 
 type StoreData = Omit<
   StoreState,
-  'pushReading' | 'setConnectionStatus' | 'setModuleState' | 'setModuleStates' | 'setTimeRange' | 'addLog' | 'setImuFrame' | 'hydrateHistory' | 'reset'
+  | 'pushReading'
+  | 'setConnectionStatus'
+  | 'setModuleState'
+  | 'setModuleStates'
+  | 'setTimeRange'
+  | 'setThemeMode'
+  | 'toggleThemeMode'
+  | 'addLog'
+  | 'setImuFrame'
+  | 'hydrateHistory'
+  | 'reset'
 >;
 
 const emptyReading = (): ESP32Data => ({
@@ -144,6 +181,7 @@ const baseData = (): StoreData => ({
   currentHistory: [],
   voltHistory: [],
   rssiHistory: [],
+  powerHistory: [],
   historyTimeline: [],
   totalCurrentMah: 0,
   peakCurrent: 0,
@@ -155,7 +193,8 @@ const baseData = (): StoreData => ({
     cpuStress: false
   },
   connectionStatus: 'offline',
-  selectedRange: '1h',
+  selectedRange: '60s',
+  themeMode: 'dark',
   ioLog: []
 });
 
@@ -184,12 +223,16 @@ const actions = {
       currentHistory: cap(current.currentHistory, data.current),
       voltHistory: cap(current.voltHistory, data.volt),
       rssiHistory: cap(current.rssiHistory, data.rssi),
+      powerHistory: cap(current.powerHistory, data.powerMw),
       historyTimeline: cap(current.historyTimeline, sampleTime),
       totalCurrentMah: data.totalMah > 0 ? data.totalMah : current.totalCurrentMah + data.current / 3600,
       peakCurrent: Math.max(current.peakCurrent, data.current)
     });
   },
   setConnectionStatus: (status: ConnectionStatus) => {
+    if (storeData.connectionStatus === status) {
+      return;
+    }
     setData({ connectionStatus: status });
   },
   setModuleState: (module: ModuleName, enabled: boolean) => {
@@ -211,6 +254,15 @@ const actions = {
   setTimeRange: (range: TimeRangeKey) => {
     setData({ selectedRange: range });
   },
+  setThemeMode: (mode: ThemeMode) => {
+    if (mode === storeData.themeMode) {
+      return;
+    }
+    setData({ themeMode: mode });
+  },
+  toggleThemeMode: () => {
+    setData({ themeMode: storeData.themeMode === 'dark' ? 'light' : 'dark' });
+  },
   addLog: (entry: IOLogEntry) => {
     setData({ ioLog: capLog(storeData.ioLog, entry) });
   },
@@ -229,15 +281,16 @@ const actions = {
       return;
     }
 
-    const tempHistory = readings.map((r) => r.temp).filter((v) => Number.isFinite(v)).slice(-5000);
-    const lightHistory = readings.map((r) => r.light).filter((v) => Number.isFinite(v)).slice(-5000);
-    const cpuHistory = readings.map((r) => r.cpu).filter((v) => Number.isFinite(v)).slice(-5000);
-    const currentHistory = readings.map((r) => r.current).filter((v) => Number.isFinite(v)).slice(-5000);
-    const voltHistory = readings.map((r) => r.volt).filter((v) => Number.isFinite(v)).slice(-5000);
-    const rssiHistory = readings.map((r) => r.rssi).filter((v) => Number.isFinite(v)).slice(-5000);
+    const tempHistory = readings.map((r) => r.temp).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
+    const lightHistory = readings.map((r) => r.light).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
+    const cpuHistory = readings.map((r) => r.cpu).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
+    const currentHistory = readings.map((r) => r.current).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
+    const voltHistory = readings.map((r) => r.volt).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
+    const rssiHistory = readings.map((r) => r.rssi).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
+    const powerHistory = readings.map((r) => r.powerMw).filter((v) => Number.isFinite(v)).slice(-HISTORY_CAP);
     const historyTimeline = readings
       .map((r) => (Number.isFinite(r.recordedAtMs) ? (r.recordedAtMs as number) : Date.now()))
-      .slice(-5000);
+      .slice(-HISTORY_CAP);
 
     const currentPeak = currentHistory.length ? Math.max(...currentHistory) : storeData.peakCurrent;
     const lastReading = readings[readings.length - 1] ?? storeData.data;
@@ -250,10 +303,11 @@ const actions = {
       currentHistory,
       voltHistory,
       rssiHistory,
+      powerHistory,
       historyTimeline,
       peakCurrent: currentPeak,
       totalCurrentMah: lastReading?.totalMah ?? storeData.totalCurrentMah,
-      ioLog: logs.slice(-1500)
+      ioLog: logs.slice(-LOG_CAP)
     });
   },
   reset: () => {

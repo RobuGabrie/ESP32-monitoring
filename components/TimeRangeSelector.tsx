@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { TimeRangeKey } from '@/hooks/useStore';
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
 }
 
 const OPTIONS: { key: TimeRangeKey; label: string }[] = [
+  { key: '60s', label: '60s' },
   { key: '15m', label: '15m' },
   { key: '1h', label: '1h' },
   { key: '6h', label: '6h' },
@@ -18,6 +21,9 @@ const OPTIONS: { key: TimeRangeKey; label: string }[] = [
 ];
 
 export function TimeRangeSelector({ value, onChange }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Interval de timp</Text>
@@ -39,7 +45,7 @@ export function TimeRangeSelector({ value, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   wrap: {
     marginBottom: theme.spacing.md
   },
@@ -61,21 +67,21 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   chipIdle: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#BFCBDA'
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border
   },
   chipActive: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#3B82F6'
+    backgroundColor: theme.accents.primary,
+    borderColor: theme.colors.primary
   },
   chipText: {
     fontSize: 12,
     fontFamily: theme.font.semiBold
   },
   chipTextIdle: {
-    color: '#334155'
+    color: theme.colors.textSoft
   },
   chipTextActive: {
-    color: '#1D4ED8'
+    color: theme.colors.primary
   }
 });

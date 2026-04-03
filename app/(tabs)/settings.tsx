@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,10 +13,13 @@ import { StatusSummaryCard } from '@/components/StatusSummaryCard';
 import { TabHero } from '@/components/TabHero';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { BATTERY_CAPACITY } from '@/constants/config';
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
 
 export default function SettingsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { data, history, totalCurrentMah, peakCurrent, status, selectedRange, setTimeRange } = useESP32();
 
   const avgCurrent = history.currentHistory.length
@@ -42,28 +46,28 @@ export default function SettingsScreen() {
       label: 'RSSI',
       value: `${Math.round(data?.rssi ?? -99)} dBm`,
       icon: 'wifi-outline' as const,
-      tone: '#ECF4FF'
+      tone: 'rgba(232,84,42,0.12)'
     },
     {
       key: 'volt',
       label: 'Tensiune',
       value: `${(data?.volt ?? 0).toFixed(2)} V`,
       icon: 'pulse-outline' as const,
-      tone: '#EDF8F2'
+      tone: 'rgba(61,220,132,0.12)'
     },
     {
       key: 'current',
       label: 'Curent',
       value: `${Math.abs(data?.current ?? 0).toFixed(1)} mA`,
       icon: 'flash-outline' as const,
-      tone: '#FFF6DF'
+      tone: 'rgba(245,158,11,0.12)'
     },
     {
       key: 'battery',
       label: 'Baterie',
       value: `${Math.round(percent)}%`,
       icon: 'battery-half-outline' as const,
-      tone: '#F1EEFB'
+      tone: 'rgba(61,220,132,0.12)'
     }
   ];
   const energyTiles = [
@@ -72,21 +76,21 @@ export default function SettingsScreen() {
       label: 'Putere instant',
       value: `${(data?.powerMw ?? 0).toFixed(1)} mW`,
       icon: 'flash-outline' as const,
-      tone: '#FEF3C7'
+      tone: 'rgba(245,158,11,0.12)'
     },
     {
       key: 'avg',
       label: 'Curent mediu',
       value: `${avgCurrent.toFixed(1)} mA`,
       icon: 'analytics-outline' as const,
-      tone: '#E0F2FE'
+      tone: 'rgba(56,189,248,0.12)'
     },
     {
       key: 'peak',
       label: 'Curent maxim',
       value: `${peakCurrent.toFixed(1)} mA`,
       icon: 'trending-up-outline' as const,
-      tone: '#EDE9FE'
+      tone: 'rgba(232,84,42,0.12)'
     }
   ];
 
@@ -98,11 +102,18 @@ export default function SettingsScreen() {
     { keyLabel: 'RSSI', value: `${Math.round(data?.rssi ?? -99)} dBm` },
     { keyLabel: 'Status', value: status === 'online' ? 'Conectat' : 'Offline', statusTone: status === 'online' ? 'online' : 'offline' }
   ];
+  const darkModeEnabled = true;
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenShell contentStyle={styles.pageShell}>
+        <ScreenShell
+          contentStyle={styles.pageShell}
+          screenTitle="Settings"
+          screenSubtitle="Conectivitate, energie si configurare dashboard"
+          selectedRange={selectedRange}
+          onRangeChange={setTimeRange}
+        >
           <TabHero
             title="Settings"
             subtitle="Centru unificat pentru conectivitate, energie si starea sistemului."
@@ -124,7 +135,7 @@ export default function SettingsScreen() {
                   value={tile.value}
                   icon={tile.icon}
                   accent={tile.tone}
-                  iconColor="#1E293B"
+                  iconColor={theme.colors.text}
                   style={styles.quickTile}
                 />
               ))}
@@ -137,7 +148,7 @@ export default function SettingsScreen() {
               <View style={styles.connectivityHead}>
                 <View style={styles.connectivityTitleWrap}>
                   <View style={styles.connectivityIconWrap}>
-                    <Ionicons name="wifi-outline" size={15} color="#1D4ED8" />
+                    <Ionicons name="wifi-outline" size={15} color={theme.colors.primary} />
                   </View>
                   <Text style={styles.connectivityTitle}>Retea Wi-Fi</Text>
                 </View>
@@ -165,7 +176,7 @@ export default function SettingsScreen() {
                     value={tile.value}
                     icon={tile.icon}
                     accent={tile.tone}
-                    iconColor="#1E293B"
+                    iconColor={theme.colors.text}
                     style={styles.energyKpi}
                   />
                 ))}
@@ -222,6 +233,9 @@ export default function SettingsScreen() {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.row}>
       <Text style={styles.rowKey}>{label}</Text>
@@ -230,7 +244,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 104 },
   pageShell: {
@@ -239,24 +253,48 @@ const styles = StyleSheet.create({
     paddingBottom: 0
   },
   panel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#DEE8F3',
+    borderColor: theme.colors.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
     ...theme.shadow.card
   },
   controlsPanel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#DEE8F3',
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 12,
     ...theme.shadow.card
+  },
+  preferenceRow: {
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10
+  },
+  preferenceTitle: {
+    color: theme.colors.text,
+    fontFamily: theme.font.semiBold,
+    fontSize: 14
+  },
+  preferenceHint: {
+    marginTop: 2,
+    color: theme.colors.textSoft,
+    fontFamily: theme.font.regular,
+    fontSize: 12
   },
   quickGrid: {
     flexDirection: 'row',
@@ -270,10 +308,10 @@ const styles = StyleSheet.create({
   },
   connectivityCard: {
     marginTop: 2,
-    backgroundColor: '#FBFDFF',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DCE7F3',
+    borderColor: theme.colors.border,
     paddingHorizontal: 12,
     paddingVertical: 12
   },
@@ -292,12 +330,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 999,
-    backgroundColor: '#EAF2FF',
+    backgroundColor: 'rgba(232,84,42,0.12)',
     alignItems: 'center',
     justifyContent: 'center'
   },
   connectivityTitle: {
-    color: '#0F172A',
+    color: theme.colors.text,
     fontFamily: theme.font.bold,
     fontSize: 14
   },
@@ -308,34 +346,34 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   connectivityStatusOnline: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0'
+    backgroundColor: 'rgba(61,220,132,0.12)',
+    borderColor: 'rgba(61,220,132,0.3)'
   },
   connectivityStatusOffline: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA'
+    backgroundColor: 'rgba(232,64,64,0.12)',
+    borderColor: 'rgba(232,64,64,0.3)'
   },
   connectivityStatusText: {
     fontFamily: theme.font.semiBold,
     fontSize: 11
   },
   connectivityStatusTextOnline: {
-    color: '#065F46'
+    color: '#3ddc84'
   },
   connectivityStatusTextOffline: {
-    color: '#B91C1C'
+    color: '#e84040'
   },
   connectivityDivider: {
     marginVertical: 8,
     height: 1,
-    backgroundColor: '#E3EAF3'
+    backgroundColor: theme.colors.border
   },
   energyCard: {
     marginTop: 2,
-    backgroundColor: '#FBFDFF',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DCE7F3',
+    borderColor: theme.colors.border,
     paddingVertical: 12,
     paddingHorizontal: 12
   },
@@ -356,7 +394,7 @@ const styles = StyleSheet.create({
   energyDivider: {
     marginVertical: 8,
     height: 1,
-    backgroundColor: '#E2E8F0'
+    backgroundColor: theme.colors.border
   },
   trendsWrap: {
     gap: 2,

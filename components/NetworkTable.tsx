@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface Row {
   keyLabel: string;
@@ -14,6 +16,9 @@ interface Props {
 }
 
 export function NetworkTable({ rows, embedded = false }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={[styles.card, embedded ? styles.cardEmbedded : null]}>
       {rows.map((row, index) => (
@@ -34,16 +39,16 @@ export function NetworkTable({ rows, embedded = false }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   card: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E6EBF2',
+    borderColor: theme.colors.border,
     marginBottom: theme.spacing.md,
     borderLeftWidth: 3,
-    borderLeftColor: '#DBEAFE'
+    borderLeftColor: theme.accents.primary
   },
   cardEmbedded: {
     marginBottom: 0,
@@ -91,19 +96,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10
   },
   statusPillOnline: {
-    backgroundColor: '#DCFCE7'
+    backgroundColor: 'rgba(61,220,132,0.12)'
   },
   statusPillOffline: {
-    backgroundColor: '#FEE2E2'
+    backgroundColor: 'rgba(232,64,64,0.12)'
   },
   statusText: {
     fontFamily: theme.font.semiBold,
     fontSize: 12
   },
   statusTextOnline: {
-    color: '#166534'
+    color: '#3ddc84'
   },
   statusTextOffline: {
-    color: '#B91C1C'
+    color: '#e84040'
   }
 });

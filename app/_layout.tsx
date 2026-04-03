@@ -6,6 +6,7 @@ import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from '@expo-google-
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
+
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -29,7 +30,7 @@ export default function RootLayout() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
       </Stack>

@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 type StatusSummaryCardProps = {
   label: string;
@@ -17,9 +19,12 @@ export function StatusSummaryCard({
   value,
   icon,
   accent,
-  iconColor = '#1E3A8A',
+  iconColor = '#f0f0f0',
   style
 }: StatusSummaryCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={[styles.card, style]}>
       <View style={styles.header}>
@@ -33,14 +38,14 @@ export function StatusSummaryCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   card: {
     flexGrow: 1,
     minWidth: 150,
-    backgroundColor: '#F7FAFE',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DCE7F3',
+    borderColor: theme.colors.border,
     paddingVertical: 12,
     paddingHorizontal: 12,
     minHeight: 86

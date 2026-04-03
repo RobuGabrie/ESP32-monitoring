@@ -8,35 +8,11 @@ import type { ImuMotionSample } from '../hooks/useImuQuaternion';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const createShadowTexture = (size = 128) => {
-  const data = new Uint8Array(size * size * 4);
-  const half = size / 2;
-
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const dx = (x - half) / half;
-      const dy = (y - half) / half;
-      const edgeDistance = Math.max(Math.abs(dx), Math.abs(dy));
-      const alpha = clamp(1 - edgeDistance, 0, 1);
-      const softened = alpha * alpha * 0.9;
-      const idx = (y * size + x) * 4;
-
-      data[idx] = 12;
-      data[idx + 1] = 18;
-      data[idx + 2] = 32;
-      data[idx + 3] = Math.round(softened * 255);
-    }
-  }
-
-  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-  texture.needsUpdate = true;
-  return texture;
-};
-
 interface Props {
   imuQRef?: MutableRefObject<{ x: number; y: number; z: number; w: number }>;
   imuMotionRef?: MutableRefObject<ImuMotionSample>;
   themeMode?: 'light' | 'immersive';
+  mobileView?: boolean;
   showHud?: boolean;
   accelX?: number;
   accelY?: number;
@@ -69,6 +45,7 @@ export function IMUCube({
   imuQRef,
   imuMotionRef,
   themeMode = 'light',
+  mobileView = false,
   showHud = true,
   accelX = 0,
   accelY = 0,
@@ -109,6 +86,7 @@ export function IMUCube({
   const externalQuaternionRef = useRef(new THREE.Quaternion(0, 0, 0, 1));
   const quaternionAlphaRef = useRef(0.18);
   const positionAlphaRef = useRef(0.12);
+  const translationGainRef = useRef(1);
   const [renderError, setRenderError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -210,12 +188,15 @@ export function IMUCube({
 
   useEffect(() => {
     const safeDtMs = clamp(Number.isFinite(dtMs) ? dtMs : 40, 8, 120);
-    positionAlphaRef.current = clamp(safeDtMs / 300, 0.08, 0.16);
+    positionAlphaRef.current = clamp(safeDtMs / 260, 0.06, 0.12);
+    translationGainRef.current = mobileView ? 0.95 : 0.9;
     const hasPosition = [posX, posY, posZ].every((v) => typeof v === 'number' && Number.isFinite(v));
 
     if (hasPosition) {
-      const visualScale = 0.2;
-      const currentPosition = new THREE.Vector3(posX as number, posY as number, posZ as number).multiplyScalar(visualScale);
+      const basePosition = new THREE.Vector3(posX as number, posY as number, posZ as number);
+      const posMagnitude = basePosition.length();
+      const adaptiveBoost = posMagnitude < 0.02 ? 8.5 : posMagnitude < 0.06 ? 4.8 : posMagnitude < 0.12 ? 2.8 : 1.8;
+      const currentPosition = basePosition.multiplyScalar(adaptiveBoost);
       if (!positionOriginRef.current) {
         positionOriginRef.current = currentPosition.clone();
       }
@@ -249,7 +230,7 @@ export function IMUCube({
       fallbackPosition.multiplyScalar(0.25);
     }
     targetPositionRef.current.copy(fallbackPosition);
-  }, [accelX, accelY, accelZ, velX, velY, velZ, posX, posY, posZ, dtMs, stationary]);
+  }, [accelX, accelY, accelZ, velX, velY, velZ, posX, posY, posZ, dtMs, stationary, mobileView]);
 
   useEffect(() => {
     return () => {
@@ -267,33 +248,39 @@ export function IMUCube({
       const { drawingBufferWidth: width, drawingBufferHeight: height } = gl;
       const isImmersive = themeMode === 'immersive';
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(isImmersive ? '#070F1D' : '#EEF4FB');
-      scene.fog = new THREE.Fog(isImmersive ? '#070F1D' : '#EEF4FB', 6.5, 15);
+      scene.background = new THREE.Color(isImmersive ? '#07101A' : '#EEF4FA');
+      scene.fog = new THREE.Fog(isImmersive ? '#07101A' : '#EEF4FA', 7.2, 18);
 
       const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-      camera.position.set(0, 2.35, 4.25);
-      camera.lookAt(0, 0, 0);
+      const mobileLike = mobileView;
+      camera.position.set(0, mobileLike ? 2.62 : 2.22, mobileLike ? 6.7 : 5.1);
+      camera.lookAt(0, 0.1, 0);
 
       const renderer = new Renderer({ gl }) as unknown as THREE.WebGLRenderer;
       renderer.setSize(width, height);
       renderer.setPixelRatio(1);
       rendererRef.current = renderer;
 
-      const ambient = new THREE.AmbientLight(isImmersive ? '#9FB2D6' : '#B7C7DE', isImmersive ? 0.4 : 0.58);
-      const key = new THREE.DirectionalLight(isImmersive ? '#EAF1FF' : '#FFFFFF', isImmersive ? 1.05 : 1.12);
-      key.position.set(2.4, 4.2, 3.2);
-      const fill = new THREE.DirectionalLight(isImmersive ? '#7F9CC9' : '#8EA9D3', isImmersive ? 0.34 : 0.4);
-      fill.position.set(-2.5, 2.2, -2.4);
-      scene.add(ambient, key, fill);
+      const ambient = new THREE.AmbientLight(isImmersive ? '#C1D1E7' : '#D8E2EF', isImmersive ? 0.55 : 0.72);
+      const key = new THREE.DirectionalLight(isImmersive ? '#F4F8FF' : '#FFFFFF', isImmersive ? 1.08 : 1.18);
+      key.position.set(2.8, 4.6, 4.2);
+      const fill = new THREE.DirectionalLight(isImmersive ? '#86A2CB' : '#91AACC', isImmersive ? 0.24 : 0.3);
+      fill.position.set(-3.4, 2.4, -3.2);
+      const rim = new THREE.DirectionalLight(isImmersive ? '#8BB0F0' : '#7FA6E4', isImmersive ? 0.12 : 0.1);
+      rim.position.set(0.8, 1.7, -4.8);
+      scene.add(ambient, key, fill, rim);
 
-      const geometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+      const prismWidth = mobileLike ? 1.5 : 1.9;
+      const prismHeight = mobileLike ? 0.86 : 1.02;
+      const prismDepth = mobileLike ? 1.1 : 1.28;
+      const geometry = new THREE.BoxGeometry(prismWidth, prismHeight, prismDepth);
       const faceMaterials = [
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#2A5FAF' : '#3E73C8', roughness: 0.34, metalness: 0.14 }),
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#2E66BA' : '#4A7FD0', roughness: 0.34, metalness: 0.14 }),
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#24559E' : '#3569BB', roughness: 0.36, metalness: 0.12 }),
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#356FC5' : '#5A8CD9', roughness: 0.32, metalness: 0.14 }),
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#224D92' : '#345FA9', roughness: 0.38, metalness: 0.1 }),
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#4B80CF' : '#6B9BE2', roughness: 0.3, metalness: 0.12 })
+        new THREE.MeshStandardMaterial({ color: '#468FEA', emissive: '#2F74D9', emissiveIntensity: 0.16, roughness: 0.32, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ color: '#5BA0F0', emissive: '#3F86E3', emissiveIntensity: 0.15, roughness: 0.32, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ color: '#74B1F5', emissive: '#5C9EF0', emissiveIntensity: 0.14, roughness: 0.31, metalness: 0.07 }),
+        new THREE.MeshStandardMaterial({ color: '#2F79D8', emissive: '#2564BF', emissiveIntensity: 0.15, roughness: 0.33, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ color: '#8FC2FA', emissive: '#71ADF2', emissiveIntensity: 0.13, roughness: 0.3, metalness: 0.06 }),
+        new THREE.MeshStandardMaterial({ color: '#1F66C9', emissive: '#194FA8', emissiveIntensity: 0.14, roughness: 0.34, metalness: 0.08 })
       ];
 
       const cube = new THREE.Mesh(geometry, faceMaterials);
@@ -302,40 +289,35 @@ export function IMUCube({
 
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry),
-        new THREE.LineBasicMaterial({ color: isImmersive ? '#D7E4FB' : '#A4BCDB', transparent: true, opacity: isImmersive ? 0.14 : 0.22 })
+        new THREE.LineBasicMaterial({ color: '#B7D3FB', transparent: true, opacity: isImmersive ? 0.18 : 0.22 })
       );
       cube.add(edges);
 
-      const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(4.1, 4.1),
-        new THREE.MeshStandardMaterial({ color: isImmersive ? '#0D1A30' : '#DCE8F6', roughness: 0.92, metalness: 0.06, transparent: true, opacity: isImmersive ? 0.96 : 0.98 })
+      const originDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 12, 12),
+        new THREE.MeshBasicMaterial({ color: isImmersive ? '#DCEAFF' : '#6B93C9' })
       );
-      floor.rotation.x = -Math.PI / 2;
-      floor.position.y = -1.12;
-      scene.add(floor);
+      scene.add(originDot);
 
-      const deckFrame = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.PlaneGeometry(4.1, 4.1)),
-        new THREE.LineBasicMaterial({ color: isImmersive ? '#5D7FAF' : '#9BB4D5', transparent: true, opacity: isImmersive ? 0.22 : 0.28 })
-      );
-      deckFrame.rotation.x = -Math.PI / 2;
-      deckFrame.position.y = -1.115;
-      scene.add(deckFrame);
-
-      const shadowTexture = createShadowTexture(160);
-      const shadow = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.9, 1.2),
-        new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, opacity: isImmersive ? 0.34 : 0.22, depthWrite: false })
-      );
-      shadow.rotation.x = -Math.PI / 2;
-      shadow.position.y = -1.108;
-      scene.add(shadow);
-
-      const grid = new THREE.GridHelper(4.4, 8, isImmersive ? '#243A5E' : '#A9BDDA', isImmersive ? '#15243D' : '#C4D3E8');
-      grid.position.y = -1.12;
+      const grid = new THREE.GridHelper(6.2, 20, isImmersive ? '#6C97D0' : '#7FA5D6', isImmersive ? '#274C82' : '#C2D7F0');
+      grid.position.y = -1.18;
       grid.material.transparent = true;
-      (grid.material as THREE.Material).opacity = isImmersive ? 0.09 : 0.24;
+      (grid.material as THREE.Material).opacity = isImmersive ? 0.22 : 0.28;
       scene.add(grid);
+
+      const gridGlow = new THREE.Mesh(
+        new THREE.PlaneGeometry(6.2, 6.2),
+        new THREE.MeshBasicMaterial({
+          color: isImmersive ? '#16345E' : '#EDF5FE',
+          transparent: true,
+          opacity: isImmersive ? 0.12 : 0.08,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        })
+      );
+      gridGlow.rotation.x = -Math.PI / 2;
+      gridGlow.position.y = -1.18;
+      scene.add(gridGlow);
 
       const render = () => {
         animationFrameRef.current = requestAnimationFrame(render);
@@ -351,11 +333,12 @@ export function IMUCube({
           const externalMotion = imuMotionRef?.current;
           if (externalMotion) {
             quaternionAlphaRef.current = clamp(externalMotion.dtMs / 180, 0.08, 0.24);
-            positionAlphaRef.current = clamp(externalMotion.dtMs / 220, 0.08, 0.22);
+            positionAlphaRef.current = clamp(externalMotion.dtMs / 80, 0.18, 0.34);
+            const gain = externalMotion.stationary ? translationGainRef.current * 0.8 : translationGainRef.current;
             targetPositionRef.current.set(
-              clamp(externalMotion.x, -1.5, 1.5),
-              clamp(externalMotion.y, -1.5, 1.5),
-              clamp(externalMotion.z, -1.5, 1.5)
+              clamp(externalMotion.x * gain, -1.5, 1.5),
+              clamp(externalMotion.y * gain, -1.5, 1.5),
+              clamp(externalMotion.z * gain, -1.5, 1.5)
             );
           }
 
@@ -366,7 +349,9 @@ export function IMUCube({
             currentQuaternionRef.current.slerp(targetQuaternionRef.current, quaternionAlphaRef.current);
           }
           cubeRef.current.quaternion.copy(currentQuaternionRef.current);
-          cubeRef.current.position.lerp(targetPositionRef.current, positionAlphaRef.current);
+          const positionDelta = cubeRef.current.position.distanceTo(targetPositionRef.current);
+          const adaptivePositionAlpha = clamp(positionAlphaRef.current + positionDelta * 0.14, 0.18, 0.45);
+          cubeRef.current.position.lerp(targetPositionRef.current, adaptivePositionAlpha);
         }
         renderer.render(scene, camera);
         gl.endFrameEXP();
@@ -384,13 +369,10 @@ export function IMUCube({
         faceMaterials.forEach((material) => material.dispose());
         (edges.geometry as THREE.BufferGeometry).dispose();
         (edges.material as THREE.Material).dispose();
-        (floor.geometry as THREE.BufferGeometry).dispose();
-        (floor.material as THREE.Material).dispose();
-        (deckFrame.geometry as THREE.BufferGeometry).dispose();
-        (deckFrame.material as THREE.Material).dispose();
-        shadowTexture.dispose();
-        (shadow.geometry as THREE.BufferGeometry).dispose();
-        (shadow.material as THREE.Material).dispose();
+        (originDot.geometry as THREE.BufferGeometry).dispose();
+        (originDot.material as THREE.Material).dispose();
+        (gridGlow.geometry as THREE.BufferGeometry).dispose();
+        (gridGlow.material as THREE.Material).dispose();
         grid.geometry.dispose();
         (grid.material as THREE.Material).dispose();
         renderer.dispose();
@@ -402,9 +384,9 @@ export function IMUCube({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, themeMode === 'immersive' ? styles.containerImmersive : styles.containerLight]}>
       <GLView style={styles.glView} onContextCreate={onContextCreate} />
-      <View style={[styles.vignette, themeMode === 'immersive' ? styles.vignetteImmersive : styles.vignetteLight]} />
+      <View pointerEvents="none" style={[styles.vignette, themeMode === 'immersive' ? styles.vignetteImmersive : styles.vignetteLight]} />
       {renderError ? (
         <View style={styles.errorOverlay}>
           <Text style={styles.errorTitle}>3D indisponibil</Text>
@@ -432,13 +414,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: '100%',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    position: 'relative'
+  },
+  containerLight: {
+    backgroundColor: '#EFF4FB'
+  },
+  containerImmersive: {
+    backgroundColor: '#030712'
   },
   glView: {
-    flex: 1
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0
   },
   vignette: {
-    ...StyleSheet.absoluteFillObject
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1
   },
   vignetteImmersive: {
     backgroundColor: 'rgba(4, 10, 24, 0.08)'
@@ -451,7 +442,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.82)',
-    paddingHorizontal: 16
+    paddingHorizontal: 16,
+    zIndex: 3,
+    elevation: 3
   },
   errorTitle: {
     ...theme.type.bodyMd,
@@ -474,7 +467,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(2, 6, 23, 0.78)',
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
-    rowGap: 2
+    rowGap: 2,
+    zIndex: 3,
+    elevation: 3
   },
   hudLine: {
     ...theme.type.bodyMd,

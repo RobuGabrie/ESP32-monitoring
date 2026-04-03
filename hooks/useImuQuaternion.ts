@@ -17,7 +17,9 @@ export type ImuAxisMapping = {
   flipX?: boolean;
   flipY?: boolean;
   flipZ?: boolean;
+  swapXY?: boolean;
   swapYZ?: boolean;
+  swapXZ?: boolean;
 };
 
 export type ImuAxisPreset = 'default' | 'invert-yaw' | 'invert-z' | 'swap-yz';
@@ -63,6 +65,18 @@ type ImuFrameSample = {
   velocity: V3;
 };
 
+// IMU stream world frame: x=right, y=forward, z=up.
+// Scene frame (Three): x=right, y=up, z=towards camera (forward is -z).
+const mapImuWorldToScene = (v: V3): V3 => ({
+  x: v.y,
+  y: v.z,
+  z: v.x
+});
+
+const POSITION_VISUAL_GAIN = 12;
+const VELOCITY_VISUAL_GAIN = 0.8;
+const LINEAR_ACCEL_VISUAL_GAIN = 0;
+
 type Options = {
   maxBufferedFrames?: number;
   heartbeatMs?: number;
@@ -74,6 +88,16 @@ type Options = {
 };
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+const softDeadzone = (value: number, threshold: number) => {
+  const abs = Math.abs(value);
+  if (abs <= threshold) {
+    return 0;
+  }
+  const sign = Math.sign(value);
+  const normalized = (abs - threshold) / (1 - threshold);
+  return sign * normalized;
+};
 
 const normalizeQ = (q: Q): Q => {
   const n = Math.hypot(q.x, q.y, q.z, q.w) || 1;
@@ -88,6 +112,32 @@ const mulQ = (a: Q, b: Q): Q => ({
   y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
   z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
 });
+
+const invertUnitQ = (q: Q): Q => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
+
+const averageQuaternions = (samples: Q[]): Q => {
+  if (!samples.length) {
+    return { x: 0, y: 0, z: 0, w: 1 };
+  }
+
+  const reference = samples[0];
+  let sx = 0;
+  let sy = 0;
+  let sz = 0;
+  let sw = 0;
+
+  for (const sample of samples) {
+    const aligned = dotQ(reference, sample) < 0
+      ? { x: -sample.x, y: -sample.y, z: -sample.z, w: -sample.w }
+      : sample;
+    sx += aligned.x;
+    sy += aligned.y;
+    sz += aligned.z;
+    sw += aligned.w;
+  }
+
+  return normalizeQ({ x: sx, y: sy, z: sz, w: sw });
+};
 
 const slerpQ = (a: Q, b: Q, t: number): Q => {
   let bx = b.x;
@@ -191,6 +241,12 @@ const presetToMapping = (preset: ImuAxisPreset): ImuAxisMapping => {
 
 const applyAxisMapping = (q: Q, mapping: ImuAxisMapping): Q => {
   let next = { ...q };
+  if (mapping.swapXY) {
+    next = { ...next, x: next.y, y: next.x };
+  }
+  if (mapping.swapXZ) {
+    next = { ...next, x: next.z, z: next.x };
+  }
   if (mapping.swapYZ) {
     next = { ...next, y: next.z, z: next.y };
   }
@@ -259,8 +315,14 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
   const prevIncomingQRef = useRef<Q>({ x: 0, y: 0, z: 0, w: 1 });
   const prevOutputQRef = useRef<Q>({ x: 0, y: 0, z: 0, w: 1 });
   const posOriginRef = useRef<V3 | null>(null);
+  const lastPosSceneRef = useRef<V3 | null>(null);
   const lastRawPosRef = useRef<V3>({ x: 0, y: 0, z: 0 });
   const velocityRef = useRef<V3>({ x: 0, y: 0, z: 0 });
+  const motionFilteredRef = useRef<V3>({ x: 0, y: 0, z: 0 });
+  const stationaryFramesRef = useRef(0);
+  const stationaryVotesRef = useRef(0);
+  const stationaryDebouncedRef = useRef(true);
+  const startupFramesRef = useRef(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -272,7 +334,12 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
   const frameDeltasRef = useRef<number[]>([]);
   const yawOffsetDegRef = useRef(0);
   const frozenRef = useRef(false);
-  const axisMappingRef = useRef<ImuAxisMapping>({});
+  // Calibrated profile for current board mount:
+  // x' = y, y' = z, z' = x  (preserves yaw that is currently correct, fixes roll/pitch pairing).
+  const axisMappingRef = useRef<ImuAxisMapping>({ swapXY: true, swapYZ: true });
+  const orientationOffsetRef = useRef<Q>({ x: 0, y: 0, z: 0, w: 1 });
+  const autoLevelPendingRef = useRef(true);
+  const calibrationSamplesRef = useRef<Q[]>([]);
   const lastFrameCounterRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -304,7 +371,14 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
       y: lastRawPosRef.current.y,
       z: lastRawPosRef.current.z
     };
+    lastPosSceneRef.current = {
+      x: lastRawPosRef.current.x,
+      y: lastRawPosRef.current.y,
+      z: lastRawPosRef.current.z
+    };
     velocityRef.current = { x: 0, y: 0, z: 0 };
+    stationaryVotesRef.current = 0;
+    stationaryDebouncedRef.current = true;
     motionRef.current = {
       ...motionRef.current,
       x: 0,
@@ -313,6 +387,19 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
       timestamp: Date.now()
     };
     pushEvent('info', 'recenter-position');
+  }, [pushEvent]);
+
+  const recalibrateOrientation = useCallback(() => {
+    // Recalibrate using the next valid IMU frame to avoid sampling stale/zero data.
+    autoLevelPendingRef.current = true;
+    orientationOffsetRef.current = { x: 0, y: 0, z: 0, w: 1 };
+    calibrationSamplesRef.current = [];
+    prevIncomingQRef.current = { x: 0, y: 0, z: 0, w: 1 };
+    prevOutputQRef.current = { x: 0, y: 0, z: 0, w: 1 };
+    quaternionRef.current = { x: 0, y: 0, z: 0, w: 1 };
+    filteredEulerRef.current = { roll: 0, pitch: 0, yaw: 0 };
+    yawOffsetDegRef.current = 0;
+    pushEvent('info', 'recalibrate-orientation-pending');
   }, [pushEvent]);
 
   const recenterYaw = useCallback(() => {
@@ -336,6 +423,8 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
     prevOutputQRef.current = { x: 0, y: 0, z: 0, w: 1 };
     quaternionRef.current = { x: 0, y: 0, z: 0, w: 1 };
     yawOffsetDegRef.current = 0;
+    orientationOffsetRef.current = { x: 0, y: 0, z: 0, w: 1 };
+    autoLevelPendingRef.current = true;
     statsRef.current.outliers = 0;
     pushEvent('info', 'reset-filters');
   }, [pushEvent]);
@@ -455,57 +544,223 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
       );
       const dtSec = dtMsValue / 1000;
 
-      const stationary = toBoolean(imu.stationary) ?? toBoolean(frame.stationary) ?? false;
+      const stationaryFlag = toBoolean(imu.stationary) ?? toBoolean(frame.stationary) ?? false;
+      const zuptFlag = toBoolean(imu.zupt) ?? toBoolean(frame.zupt) ?? false;
+      const stationaryCandidate = stationaryFlag || zuptFlag;
+      stationaryVotesRef.current = clamp(stationaryVotesRef.current + (stationaryCandidate ? 1 : -1), -6, 6);
+      if (stationaryVotesRef.current >= 1) {
+        stationaryDebouncedRef.current = true;
+      } else if (stationaryVotesRef.current <= -1) {
+        stationaryDebouncedRef.current = false;
+      }
+      const stationary = stationaryDebouncedRef.current;
+      startupFramesRef.current += 1;
+      const warmupActive = startupFramesRef.current < 14;
 
-      const pos: V3 = {
-        x: pickNumber(imu, ['pos_x', 'posX']) ?? pickNumber(frame, ['pos_x', 'posX']) ?? 0,
-        y: pickNumber(imu, ['pos_y', 'posY']) ?? pickNumber(frame, ['pos_y', 'posY']) ?? 0,
-        z: pickNumber(imu, ['pos_z', 'posZ']) ?? pickNumber(frame, ['pos_z', 'posZ']) ?? 0
+      const posXRaw = pickNumber(imu, ['pos_x', 'posX']) ?? pickNumber(frame, ['pos_x', 'posX']);
+      const posYRaw = pickNumber(imu, ['pos_y', 'posY']) ?? pickNumber(frame, ['pos_y', 'posY']);
+      const posZRaw = pickNumber(imu, ['pos_z', 'posZ']) ?? pickNumber(frame, ['pos_z', 'posZ']);
+      const hasPosStream = posXRaw !== null && posYRaw !== null && posZRaw !== null;
+
+      const posImu: V3 = {
+        x: posXRaw ?? 0,
+        y: posYRaw ?? 0,
+        z: posZRaw ?? 0
       };
+      let pos = mapImuWorldToScene(posImu);
+      if (lastPosSceneRef.current) {
+        const maxPosJumpPerFrame = clamp((dtMsValue / 1000) * (stationary ? 1.0 : 5.0), 0.03, 0.22);
+        const dx = pos.x - lastPosSceneRef.current.x;
+        const dy = pos.y - lastPosSceneRef.current.y;
+        const dz = pos.z - lastPosSceneRef.current.z;
+        const jump = Math.hypot(dx, dy, dz);
+        if (jump > maxPosJumpPerFrame && jump > 1e-6) {
+          const t = maxPosJumpPerFrame / jump;
+          pos = {
+            x: lastPosSceneRef.current.x + dx * t,
+            y: lastPosSceneRef.current.y + dy * t,
+            z: lastPosSceneRef.current.z + dz * t
+          };
+        }
+      }
+      lastPosSceneRef.current = pos;
       lastRawPosRef.current = pos;
 
-      const velStream: V3 = {
-        x: pickNumber(imu, ['vel_x', 'velX']) ?? pickNumber(frame, ['vel_x', 'velX']) ?? 0,
-        y: pickNumber(imu, ['vel_y', 'velY']) ?? pickNumber(frame, ['vel_y', 'velY']) ?? 0,
-        z: pickNumber(imu, ['vel_z', 'velZ']) ?? pickNumber(frame, ['vel_z', 'velZ']) ?? 0
+      if (warmupActive) {
+        if (hasPosStream) {
+          posOriginRef.current = { ...pos };
+        }
+        velocityRef.current = { x: 0, y: 0, z: 0 };
+        motionFilteredRef.current = { x: 0, y: 0, z: 0 };
+        stationaryFramesRef.current = 0;
+        motionRef.current = {
+          x: 0,
+          y: 0,
+          z: 0,
+          dtMs: dtMsValue,
+          stationary: true,
+          timestamp: now
+        };
+      }
+
+      const velXRaw = pickNumber(imu, ['vel_x', 'velX']) ?? pickNumber(frame, ['vel_x', 'velX']);
+      const velYRaw = pickNumber(imu, ['vel_y', 'velY']) ?? pickNumber(frame, ['vel_y', 'velY']);
+      const velZRaw = pickNumber(imu, ['vel_z', 'velZ']) ?? pickNumber(frame, ['vel_z', 'velZ']);
+      const hasVelStream = velXRaw !== null && velYRaw !== null && velZRaw !== null;
+
+      const velStreamImu: V3 = {
+        x: velXRaw ?? 0,
+        y: velYRaw ?? 0,
+        z: velZRaw ?? 0
       };
+      const velStream = mapImuWorldToScene(velStreamImu);
+
+      const linAccImu: V3 = {
+        x: pickNumber(imu, ['lin_ax', 'linAx']) ?? pickNumber(frame, ['lin_ax', 'linAx']) ?? 0,
+        y: pickNumber(imu, ['lin_ay', 'linAy']) ?? pickNumber(frame, ['lin_ay', 'linAy']) ?? 0,
+        z: pickNumber(imu, ['lin_az', 'linAz']) ?? pickNumber(frame, ['lin_az', 'linAz']) ?? 0
+      };
+      const hasLinStream =
+        pickNumber(imu, ['lin_ax', 'linAx']) !== null &&
+        pickNumber(imu, ['lin_ay', 'linAy']) !== null &&
+        pickNumber(imu, ['lin_az', 'linAz']) !== null;
+      const linAcc = mapImuWorldToScene(linAccImu);
 
       if (posOriginRef.current === null) {
         posOriginRef.current = { ...pos };
       }
 
-      const velocityBlend = clamp(dtMsValue / 40, 0.12, 0.45);
-      velocityRef.current = {
-        x: velocityRef.current.x + (velStream.x - velocityRef.current.x) * velocityBlend,
-        y: velocityRef.current.y + (velStream.y - velocityRef.current.y) * velocityBlend,
-        z: velocityRef.current.z + (velStream.z - velocityRef.current.z) * velocityBlend
-      };
+      if (warmupActive) {
+        velocityRef.current = { x: 0, y: 0, z: 0 };
+        motionFilteredRef.current = { x: 0, y: 0, z: 0 };
+        stationaryFramesRef.current = 0;
+        if (hasPosStream) {
+          posOriginRef.current = { ...pos };
+        }
+        motionRef.current = {
+          x: 0,
+          y: 0,
+          z: 0,
+          dtMs: dtMsValue,
+          stationary: true,
+          timestamp: now
+        };
+      } else {
+        // Keep a moving baseline so long-term bias does not accumulate into visible drift.
+        if (hasPosStream) {
+          const originFollow = stationary ? 0.12 : 0.04;
+          posOriginRef.current = {
+            x: (posOriginRef.current?.x ?? 0) + (pos.x - (posOriginRef.current?.x ?? 0)) * originFollow,
+            y: (posOriginRef.current?.y ?? 0) + (pos.y - (posOriginRef.current?.y ?? 0)) * originFollow,
+            z: (posOriginRef.current?.z ?? 0) + (pos.z - (posOriginRef.current?.z ?? 0)) * originFollow
+          };
+        }
 
-      if (stationary) {
-        const damping = Math.exp(-dtSec / 0.09);
+        const velocityBlend = clamp(dtMsValue / 55, 0.18, 0.55);
         velocityRef.current = {
-          x: velocityRef.current.x * damping,
-          y: velocityRef.current.y * damping,
-          z: velocityRef.current.z * damping
+          x: velocityRef.current.x + (velStream.x - velocityRef.current.x) * velocityBlend,
+          y: velocityRef.current.y + (velStream.y - velocityRef.current.y) * velocityBlend,
+          z: velocityRef.current.z + (velStream.z - velocityRef.current.z) * velocityBlend
+        };
+
+        if (stationary) {
+          const damping = Math.exp(-dtSec / 0.09);
+          velocityRef.current = {
+            x: velocityRef.current.x * damping,
+            y: velocityRef.current.y * damping,
+            z: velocityRef.current.z * damping
+          };
+          stationaryFramesRef.current += 1;
+        } else {
+          stationaryFramesRef.current = 0;
+        }
+
+        const relativePos = {
+          x: pos.x - (posOriginRef.current?.x ?? 0),
+          y: pos.y - (posOriginRef.current?.y ?? 0),
+          z: pos.z - (posOriginRef.current?.z ?? 0)
+        };
+
+        // Translation is driven strictly by WS IMU vectors (pos/vel/lin), not by raw body acceleration fallback.
+        const rpX = softDeadzone(relativePos.x, stationary ? 0.012 : 0.006);
+        const rpY = softDeadzone(relativePos.y, stationary ? 0.012 : 0.006);
+        const rpZ = softDeadzone(relativePos.z, stationary ? 0.012 : 0.006);
+
+        const posTerm: V3 = hasPosStream
+          ? {
+              x: rpX * POSITION_VISUAL_GAIN,
+              y: rpY * POSITION_VISUAL_GAIN,
+              z: rpZ * POSITION_VISUAL_GAIN
+            }
+          : { x: 0, y: 0, z: 0 };
+
+        const velTerm: V3 = hasVelStream
+          ? {
+              x: velocityRef.current.x * VELOCITY_VISUAL_GAIN,
+              y: velocityRef.current.y * VELOCITY_VISUAL_GAIN,
+              z: velocityRef.current.z * VELOCITY_VISUAL_GAIN
+            }
+          : { x: 0, y: 0, z: 0 };
+
+        const linTerm: V3 = hasLinStream
+          ? {
+              x: linAcc.x * LINEAR_ACCEL_VISUAL_GAIN,
+              y: linAcc.y * LINEAR_ACCEL_VISUAL_GAIN,
+              z: linAcc.z * LINEAR_ACCEL_VISUAL_GAIN
+            }
+          : { x: 0, y: 0, z: 0 };
+
+        const rawTargetMotion: V3 = {
+          x: clamp(posTerm.x + velTerm.x + linTerm.x, -1.15, 1.15),
+          y: clamp(posTerm.y + velTerm.y + linTerm.y, -1.15, 1.15),
+          z: clamp(posTerm.z + velTerm.z + linTerm.z, -1.15, 1.15)
+        };
+
+        const maxMotionStepPerFrame = clamp((dtMsValue / 1000) * (stationary ? 1.8 : 6.4), 0.08, 0.3);
+        const mx = rawTargetMotion.x - motionFilteredRef.current.x;
+        const my = rawTargetMotion.y - motionFilteredRef.current.y;
+        const mz = rawTargetMotion.z - motionFilteredRef.current.z;
+        const motionDelta = Math.hypot(mx, my, mz);
+        const targetMotion: V3 = motionDelta > maxMotionStepPerFrame && motionDelta > 1e-6
+          ? {
+              x: motionFilteredRef.current.x + (mx / motionDelta) * maxMotionStepPerFrame,
+              y: motionFilteredRef.current.y + (my / motionDelta) * maxMotionStepPerFrame,
+              z: motionFilteredRef.current.z + (mz / motionDelta) * maxMotionStepPerFrame
+            }
+          : rawTargetMotion;
+
+        const deltaToTarget = Math.hypot(
+          targetMotion.x - motionFilteredRef.current.x,
+          targetMotion.y - motionFilteredRef.current.y,
+          targetMotion.z - motionFilteredRef.current.z
+        );
+        const baseMotionAlpha = stationary ? 0.18 : clamp(dtMsValue / 60, 0.22, 0.48);
+        const catchupBoost = clamp(deltaToTarget * 0.18, 0, 0.14);
+        const motionAlpha = clamp(baseMotionAlpha + catchupBoost, 0.18, 0.56);
+        motionFilteredRef.current = {
+          x: motionFilteredRef.current.x + (targetMotion.x - motionFilteredRef.current.x) * motionAlpha,
+          y: motionFilteredRef.current.y + (targetMotion.y - motionFilteredRef.current.y) * motionAlpha,
+          z: motionFilteredRef.current.z + (targetMotion.z - motionFilteredRef.current.z) * motionAlpha
+        };
+
+        // Snap smoothly to origin after sustained stationary frames to remove residual drift.
+        if (stationaryFramesRef.current > 8) {
+          motionFilteredRef.current = {
+            x: motionFilteredRef.current.x * 0.78,
+            y: motionFilteredRef.current.y * 0.78,
+            z: motionFilteredRef.current.z * 0.78
+          };
+        }
+
+        motionRef.current = {
+          x: clamp(motionFilteredRef.current.x, -1.15, 1.15),
+          y: clamp(motionFilteredRef.current.y, -1.15, 1.15),
+          z: clamp(motionFilteredRef.current.z, -1.15, 1.15),
+          dtMs: dtMsValue,
+          stationary,
+          timestamp: now
         };
       }
-
-      const relativePos = {
-        x: pos.x - (posOriginRef.current?.x ?? 0),
-        y: pos.y - (posOriginRef.current?.y ?? 0),
-        z: pos.z - (posOriginRef.current?.z ?? 0)
-      };
-
-      const posScale = stationary ? 0.12 : 0.2;
-      const velScale = stationary ? 0.012 : 0.03;
-      motionRef.current = {
-        x: clamp(relativePos.x * posScale + velocityRef.current.x * velScale, -1.5, 1.5),
-        y: clamp(relativePos.y * posScale + velocityRef.current.y * velScale, -1.5, 1.5),
-        z: clamp(relativePos.z * posScale + velocityRef.current.z * velScale, -1.5, 1.5),
-        dtMs: dtMsValue,
-        stationary,
-        timestamp: now
-      };
 
       const q0 = pickNumber(imu, ['q0', 'quat0']);
       const q1 = pickNumber(imu, ['q1', 'quat1']);
@@ -529,15 +784,36 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
       incoming = normalizeQ(incoming);
       incoming = applyAxisMapping(incoming, axisMappingRef.current);
 
+      const gx = pickNumber(imu, ['gx']) ?? 0;
+      const gy = pickNumber(imu, ['gy']) ?? 0;
+      const gz = pickNumber(imu, ['gz']) ?? 0;
+      const angularSpeed = Math.hypot(gx, gy, gz);
+
+      if (autoLevelPendingRef.current) {
+        const stationaryForCalibration = stationary || angularSpeed < 6;
+        if (stationaryForCalibration) {
+          calibrationSamplesRef.current.push(incoming);
+          if (calibrationSamplesRef.current.length > 18) {
+            calibrationSamplesRef.current.shift();
+          }
+        }
+
+        if (calibrationSamplesRef.current.length >= 10) {
+          const averaged = averageQuaternions(calibrationSamplesRef.current);
+          orientationOffsetRef.current = invertUnitQ(averaged);
+          autoLevelPendingRef.current = false;
+          calibrationSamplesRef.current = [];
+          pushEvent('info', 'recalibrate-orientation-ready');
+        }
+      }
+
+      incoming = normalizeQ(mulQ(orientationOffsetRef.current, incoming));
+
       if (dotQ(prevIncomingQRef.current, incoming) < 0) {
         incoming = { x: -incoming.x, y: -incoming.y, z: -incoming.z, w: -incoming.w };
       }
       prevIncomingQRef.current = incoming;
 
-      const gx = pickNumber(imu, ['gx']) ?? 0;
-      const gy = pickNumber(imu, ['gy']) ?? 0;
-      const gz = pickNumber(imu, ['gz']) ?? 0;
-      const angularSpeed = Math.hypot(gx, gy, gz);
       const dtFactor = clamp(dtMsValue / 16, 0, 1);
       const speedFactor = clamp(angularSpeed / 360, 0, 1);
       let alpha = clamp(0.15 + dtFactor * 0.14 + speedFactor * 0.16, 0.15, 0.45);
@@ -556,6 +832,16 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
         const half = (yawOffsetDegRef.current * Math.PI) / 360;
         const yawOffsetQ: Q = { x: 0, y: 0, z: Math.sin(half), w: Math.cos(half) };
         blended = normalizeQ(mulQ(yawOffsetQ, blended));
+      }
+
+      // If sensor is stationary and close to level, damp residual roll/pitch drift while preserving yaw.
+      if (stationary) {
+        const e = quaternionToEuler(blended);
+        if (Math.abs(e.roll) < 8 && Math.abs(e.pitch) < 8) {
+          const yawHalf = (e.yaw * Math.PI) / 360;
+          const yawOnly: Q = { x: 0, y: 0, z: Math.sin(yawHalf), w: Math.cos(yawHalf) };
+          blended = normalizeQ(slerpQ(blended, yawOnly, 0.09));
+        }
       }
 
       prevOutputQRef.current = blended;
@@ -588,6 +874,10 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
         ws.onopen = () => {
           reconnectAttemptRef.current = 0;
           lastMessageAtRef.current = Date.now();
+          startupFramesRef.current = 0;
+          autoLevelPendingRef.current = true;
+          orientationOffsetRef.current = { x: 0, y: 0, z: 0, w: 1 };
+          calibrationSamplesRef.current = [];
           setStatus('connected');
 
           heartbeatTimerRef.current = setInterval(() => {
@@ -675,6 +965,7 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
     isFrozen: frozenRef,
     connectImu,
     disconnectImu,
+    recalibrateOrientation,
     recenterPosition,
     recenterYaw,
     resetFilters,

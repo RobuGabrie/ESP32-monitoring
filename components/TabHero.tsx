@@ -1,7 +1,8 @@
-import { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ReactNode, useEffect, useMemo, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface MetaItem {
   label: string;
@@ -18,132 +19,179 @@ interface Props {
 }
 
 export function TabHero({ title, subtitle, statusLabel, statusTone = 'neutral', meta = [], footer }: Props) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const blinkAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkAnim, { toValue: 0.2, duration: 750, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(blinkAnim, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.quad), useNativeDriver: true })
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [blinkAnim]);
+
+  const ip = meta.find((m) => m.label === 'IP')?.value ?? '--';
+
   return (
     <View style={styles.hero}>
-      <View style={styles.topRow}>
-        <Text style={styles.title}>{title}</Text>
-        {statusLabel ? (
+      {/* Header row */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarIcon}>⚡</Text>
+          </View>
+          <View>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+          </View>
+        </View>
+
+      </View>
+
+      {/* Live row */}
+      <View style={styles.liveRow}>
+        <View style={styles.livePill}>
+          <Animated.View style={[styles.liveDot, { opacity: blinkAnim }]} />
+          <Text style={styles.livePillText}>LIVE</Text>
+        </View>
+        <View style={styles.connPill}>
+          <Text style={styles.connPillText}>📡 {ip}</Text>
+        </View>
+        {statusLabel && (
           <View
             style={[
-              styles.badge,
-              statusTone === 'online' ? styles.badgeOnline : null,
-              statusTone === 'offline' ? styles.badgeOffline : null,
-              statusTone === 'neutral' ? styles.badgeNeutral : null
+              styles.statusPill,
+              statusTone === 'online' ? styles.statusOnline : styles.statusOffline
             ]}
           >
             <Text
               style={[
-                styles.badgeText,
-                statusTone === 'online' ? styles.badgeTextOnline : null,
-                statusTone === 'offline' ? styles.badgeTextOffline : null,
-                statusTone === 'neutral' ? styles.badgeTextNeutral : null
+                styles.statusPillText,
+                statusTone === 'online' ? styles.statusTextOnline : styles.statusTextOffline
               ]}
             >
               {statusLabel}
             </Text>
           </View>
-        ) : null}
+        )}
       </View>
 
-      <Text style={styles.subtitle}>{subtitle}</Text>
-
-      {meta.length ? (
-        <View style={styles.metaWrap}>
-          {meta.map((item) => (
-            <View key={`${item.label}:${item.value}`} style={styles.metaChip}>
-              <Text style={styles.metaLabel}>{item.label}</Text>
-              <Text style={styles.metaValue}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {footer ? <View style={styles.footerWrap}>{footer}</View> : null}
+      {footer && <View style={styles.footerWrap}>{footer}</View>}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   hero: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
-    padding: 14,
+    paddingHorizontal: 4,
+    paddingTop: 8,
+    paddingBottom: 4,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E8ECF2',
-    borderLeftWidth: 1,
-    borderLeftColor: '#E8ECF2'
+    gap: 12
   },
-  topRow: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  avatarIcon: {
+    fontSize: 18,
+    color: '#fff'
   },
   title: {
     color: theme.colors.text,
     fontFamily: theme.font.bold,
-    fontSize: 23
+    fontSize: 18
   },
   subtitle: {
-    marginTop: 4,
-    color: theme.colors.muted,
-    fontFamily: theme.font.regular,
-    fontSize: 13
-  },
-  metaWrap: {
-    marginTop: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  metaChip: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    minWidth: 108
-  },
-  metaLabel: {
     color: theme.colors.textSoft,
-    fontFamily: theme.font.medium,
-    fontSize: 11
+    fontFamily: theme.font.regular,
+    fontSize: 13,
+    marginTop: 1
   },
-  metaValue: {
-    marginTop: 2,
-    color: theme.colors.text,
-    fontFamily: theme.font.semiBold,
-    fontSize: 13
+  liveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
   },
-  footerWrap: {
-    marginTop: 10
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(232,84,42,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,84,42,0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20
   },
-  badge: {
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.primary
+  },
+  livePillText: {
+    color: theme.colors.primaryLight,
+    fontFamily: theme.font.bold,
+    fontSize: 12
+  },
+  connPill: {
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999
+    borderRadius: 20
   },
-  badgeOnline: {
-    backgroundColor: '#DCFCE7'
-  },
-  badgeOffline: {
-    backgroundColor: '#FEE2E2'
-  },
-  badgeNeutral: {
-    backgroundColor: '#E2E8F0'
-  },
-  badgeText: {
+  connPillText: {
+    color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
     fontSize: 12
   },
-  badgeTextOnline: {
-    color: '#166534'
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1
   },
-  badgeTextOffline: {
-    color: '#B91C1C'
+  statusOnline: {
+    backgroundColor: 'rgba(61,220,132,0.12)',
+    borderColor: 'rgba(61,220,132,0.25)'
   },
-  badgeTextNeutral: {
-    color: '#334155'
+  statusOffline: {
+    backgroundColor: 'rgba(232,64,64,0.12)',
+    borderColor: 'rgba(232,64,64,0.25)'
+  },
+  statusPillText: {
+    fontFamily: theme.font.bold,
+    fontSize: 12
+  },
+  statusTextOnline: {
+    color: theme.colors.success
+  },
+  statusTextOffline: {
+    color: theme.colors.danger
+  },
+  footerWrap: {
+    marginTop: 2
   }
 });
