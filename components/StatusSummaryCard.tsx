@@ -43,17 +43,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexGrow: 1,
     minWidth: 150,
     backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 12,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
     minHeight: 86
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7
+    gap: theme.spacing.xs
   },
   iconWrap: {
     width: 20,
@@ -67,9 +67,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     ...theme.type.cardLabel
   },
   value: {
-    marginTop: 7,
+    marginTop: theme.spacing.sm,
     color: theme.colors.text,
-    ...theme.type.cardValue,
-    lineHeight: 30
+    ...theme.type.cardValue
   }
 });

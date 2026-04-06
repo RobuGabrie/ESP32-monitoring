@@ -99,22 +99,22 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
 
   return (
     <View style={[styles.card, style]}>
-      {/* Header */}
+      {/* Antet */}
       <View style={styles.titleRow}>
         <Text style={styles.title} numberOfLines={1}>
-          {title ?? 'Incarcare CPU'}
+          {title ?? 'Încărcare CPU'}
         </Text>
         {highLoadCount > 0 && (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>⚡ {highLoadCount} varfuri</Text>
+            <Text style={styles.badgeText}>⚡ {highLoadCount} vârfuri</Text>
           </View>
         )}
       </View>
       <Text style={styles.sub}>
-        {subtitle ?? 'Incarcare CPU (albastru) si consum curent (portocaliu) in ultimele ore'}
+        {subtitle ?? 'Încărcare CPU (albastru) și consum curent (portocaliu) în ultimele ore'}
       </Text>
 
-      {/* Legend */}
+      {/* Legendă */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.chart.palette.cpu }]} />
@@ -130,21 +130,21 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
         </View>
       </View>
 
-      {/* Chart area */}
+      {/* Zonă grafic */}
       <View style={styles.chartArea}>
-        {/* Y-axis labels (CPU) */}
+        {/* Etichete axa Y (CPU) */}
         <View style={styles.yAxis}>
           <Text style={[styles.yLabel, { position: 'absolute', top: y100 - 2, right: 2 }]}>100</Text>
           <Text style={[styles.yLabel, { position: 'absolute', top: y80 - 5, right: 2 }]}>80</Text>
           <Text style={[styles.yLabel, { position: 'absolute', bottom: 0, right: 2 }]}>0</Text>
         </View>
 
-        {/* SVG chart */}
+        {/* Grafic SVG */}
         <View style={styles.chartWrap}>
           <Svg width="100%" height={BAR_HEIGHT} viewBox={`0 0 ${SVG_W} ${BAR_HEIGHT}`} preserveAspectRatio="none">
-            {/* 100% ceiling guide */}
+            {/* Linie ghid 100% */}
             <Line x1={0} y1={y100} x2={SVG_W} y2={y100} stroke={theme.colors.border} strokeWidth={0.5} />
-            {/* 80% danger threshold */}
+            {/* Prag pericol 80% */}
             <Line
               x1={0} y1={y80} x2={SVG_W} y2={y80}
               stroke={theme.colors.warning}
@@ -152,7 +152,7 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
               strokeDasharray="4,4"
               opacity={0.6}
             />
-            {/* current half scale guide */}
+            {/* Linie ghid jumătate scală curent */}
             <Line
               x1={0} y1={yCurrentHalf} x2={SVG_W} y2={yCurrentHalf}
               stroke={theme.colors.border}
@@ -165,9 +165,9 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
               const curr = currentBuckets[i];
               const x = i * (barWidth + GAP);
 
-              // CPU on fixed 0–100 scale
+              // CPU pe scală fixă 0–100
               const cpuH = Math.max(2, (cpu / CPU_MAX) * (BAR_HEIGHT - 4));
-              // Current on dedicated mA scale
+              // Curent pe scală dedicată mA
               const currH = Math.max(2, (curr / currentAxisMax) * (BAR_HEIGHT - 4));
 
               const cpuColor =
@@ -200,7 +200,7 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
             })}
           </Svg>
 
-          {/* Time labels below chart */}
+          {/* Etichete timp sub grafic */}
           <View style={styles.timeRow}>
             {timeLabels.map((label, i) => (
               <Text key={i} style={styles.timeLabel}>{label}</Text>
@@ -208,7 +208,7 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
           </View>
         </View>
 
-        {/* Y-axis labels (Current mA) */}
+        {/* Etichete axa Y (Curent mA) */}
         <View style={styles.yAxisRight}>
           <Text style={[styles.yLabel, { position: 'absolute', top: y100 - 2, left: 2 }]}>
             {currentAxisMax.toFixed(0)}
@@ -220,7 +220,7 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
         </View>
       </View>
 
-      {/* Footer stats */}
+      {/* Statistici subsol */}
       <View style={styles.footer}>
         <View style={styles.footerStat}>
           <Text style={styles.footerLabel}>ACUM</Text>
@@ -235,7 +235,7 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
           <Text style={styles.footerVal}>{avgCpu.toFixed(0)}%</Text>
         </View>
         <View style={styles.footerStat}>
-          <Text style={styles.footerLabel}>VARF</Text>
+          <Text style={styles.footerLabel}>VÂRF</Text>
           <Text style={[styles.footerVal, {
             color: peakCpu >= 80 ? theme.colors.warning : theme.colors.text
           }]}>{peakCpu.toFixed(0)}%</Text>
@@ -254,50 +254,47 @@ export function BarChart({ cpuHistory, currentHistory, historyTimeline, title, s
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   card: {
     backgroundColor: theme.colors.card,
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 12,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     width: '100%',
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 3,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
   },
   title: {
     color: theme.colors.text,
-    fontFamily: theme.font.bold,
-    fontSize: 18,
+    ...theme.type.sectionTitle,
     flex: 1,
   },
   badge: {
     backgroundColor: theme.accents.warning,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   badgeText: {
     color: theme.colors.warning,
-    fontFamily: theme.font.medium,
-    fontSize: 11,
+    ...theme.type.caption,
   },
   sub: {
     color: theme.colors.textSoft,
-    fontFamily: theme.font.medium,
-    fontSize: 12,
-    marginBottom: 10,
+    ...theme.type.bodySm,
+    marginBottom: theme.spacing.sm,
   },
   legend: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
     flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: theme.spacing.xs,
   },
   legendDot: {
     width: 8,
@@ -306,8 +303,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   legendLabel: {
     color: theme.colors.textSoft,
-    fontFamily: theme.font.medium,
-    fontSize: 11,
+    ...theme.type.caption,
   },
   chartArea: {
     flexDirection: 'row',
@@ -316,12 +312,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   yAxis: {
     width: 30,
     height: BAR_HEIGHT,
-    marginRight: 6,
+    marginRight: theme.spacing.xs,
   },
   yAxisRight: {
     width: 38,
     height: BAR_HEIGHT,
-    marginLeft: 6,
+    marginLeft: theme.spacing.xs,
   },
   yLabel: {
     color: theme.colors.muted,
@@ -336,7 +332,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 4,
-    marginBottom: 10,
+    marginBottom: theme.spacing.sm,
   },
   timeLabel: {
     fontSize: 9,
@@ -349,7 +345,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingTop: 12,
+    paddingTop: theme.spacing.md,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
@@ -358,10 +354,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   footerLabel: {
-    fontSize: 11,
+    ...theme.type.caption,
     color: theme.colors.textSoft,
-    fontFamily: theme.font.medium,
-    marginBottom: 3,
+    marginBottom: theme.spacing.xs,
   },
   footerVal: {
     fontSize: 20,

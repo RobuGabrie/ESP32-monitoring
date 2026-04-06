@@ -52,17 +52,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   label: {
     ...theme.type.cardLabel,
     color: theme.colors.muted,
-    marginBottom: 8
+    marginBottom: theme.spacing.sm
   },
   row: {
-    gap: 10,
-    paddingRight: 8
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.sm
   },
   chip: {
     borderRadius: 999,
     minHeight: theme.touch.minTarget,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     justifyContent: 'center',
     borderWidth: 1
   },
@@ -75,7 +75,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderColor: theme.colors.primary
   },
   chipText: {
-    fontSize: 12,
+    ...theme.type.bodySm,
     fontFamily: theme.font.semiBold
   },
   chipTextIdle: {

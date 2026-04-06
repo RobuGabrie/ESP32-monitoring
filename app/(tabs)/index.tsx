@@ -378,8 +378,8 @@ export default function OverviewScreen() {
               cpuHistory={visibleHistory.cpuHistory}
               currentHistory={visibleHistory.currentHistory}
               historyTimeline={visibleHistory.timeline}
-              title="CPU Load"
-              subtitle="CPU % (orange) vs current draw (blue) over time"
+              title="CPU Load in comparatie cu Curent"
+              subtitle="CPU Load vs Curent consumat · ultimele 60 secunde"
             />
           </View>
           <View style={[styles.heroCol, isDesktop && styles.heroColDesktop, styles.heroColSymmetric]}>
@@ -477,8 +477,8 @@ export default function OverviewScreen() {
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
     paddingBottom: 120
   },
   pageShell: {
@@ -488,8 +488,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   heroRow: {
     flexDirection: 'column',
-    gap: 12,
-    marginBottom: 12,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
     width: '100%'
   },
   heroRowDesktop: {
@@ -517,8 +517,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sensorRtcRow: {
     flexDirection: 'column',
-    gap: 12,
-    marginBottom: 12
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md
   },
   sensorRtcRowDesktop: {
     flexDirection: 'row',
@@ -536,9 +536,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   rtcCard: {
     marginTop: 2,
     marginBottom: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceMuted,
@@ -554,8 +554,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   rtcCardDesktopCompact: {
     flexBasis: '34%',
     minWidth: 250,
-    paddingHorizontal: 12,
-    paddingVertical: 10
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm
   },
   rtcGlowSvg: {
     ...StyleSheet.absoluteFillObject
@@ -573,22 +573,21 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   rtcTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: theme.spacing.xs
   },
   rtcTitle: {
-    fontSize: 11,
+    ...theme.type.caption,
     color: theme.colors.textSoft,
-    fontFamily: theme.font.medium,
     letterSpacing: 0.8
   },
   rtcBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5
+    gap: theme.spacing.xs
   },
   rtcLivePulseDot: {
     width: 6,
@@ -605,7 +604,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: 'rgba(232,84,42,0.12)'
   },
   rtcBadgeText: {
-    fontSize: 10,
+    ...theme.type.caption,
     fontFamily: theme.font.bold,
     letterSpacing: 0.6
   },
@@ -616,46 +615,42 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.primary
   },
   rtcTimeValue: {
-    marginTop: 8,
-    fontSize: 30,
-    lineHeight: 34,
+    marginTop: theme.spacing.sm,
+    ...theme.type.cardValueLarge,
     color: theme.colors.text,
-    fontFamily: theme.font.mono,
     fontWeight: '700'
   },
   rtcTimeValueCompact: {
-    fontSize: 24,
-    lineHeight: 29
+    fontSize: 26,
+    lineHeight: 31
   },
   rtcTimeValueStale: {
     color: theme.colors.muted
   },
   rtcMetaRow: {
-    marginTop: 8,
+    marginTop: theme.spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10
+    gap: theme.spacing.sm
   },
   rtcAgeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4
+    gap: theme.spacing.xs
   },
   rtcDateText: {
-    fontSize: 12,
-    color: theme.colors.textSoft,
-    fontFamily: theme.font.medium
+    ...theme.type.bodySm,
+    color: theme.colors.textSoft
   },
   rtcAgeText: {
-    fontSize: 12,
-    color: theme.colors.muted,
-    fontFamily: theme.font.medium
+    ...theme.type.bodySm,
+    color: theme.colors.muted
   },
   rtcFreshTrack: {
     height: 4,
     borderRadius: 3,
-    marginTop: 10,
+    marginTop: theme.spacing.sm,
     backgroundColor: theme.colors.border,
     overflow: 'hidden'
   },
@@ -667,23 +662,23 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
-    padding: 14
+    padding: theme.spacing.md
   },
   modalCard: {
     backgroundColor: theme.colors.card,
-    borderRadius: 18,
-    padding: 12,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
     maxHeight: '92%',
     ...theme.shadow.floating
   },
   modalHeader: {
-    marginBottom: 6,
+    marginBottom: theme.spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8
+    gap: theme.spacing.sm
   },
   modalTitle: {
     color: theme.colors.text,
@@ -693,29 +688,27 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   modalTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: theme.spacing.xs
   },
   modalSubtitle: {
     marginTop: 2,
     color: theme.colors.muted,
-    fontFamily: theme.font.medium,
-    fontSize: 12
+    ...theme.type.bodySm
   },
   closeButton: {
     borderRadius: 999,
     backgroundColor: theme.colors.surfaceAlt,
-    paddingHorizontal: 10,
-    paddingVertical: 6
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs
   },
   closeText: {
     color: theme.colors.primary,
-    fontFamily: theme.font.medium,
-    fontSize: 12
+    ...theme.type.bodySm
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8
+    gap: theme.spacing.sm
   },
   statItem: {
     flexBasis: '48%',
@@ -723,29 +716,27 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm
   },
   statLabel: {
     color: theme.colors.muted,
-    fontFamily: theme.font.medium,
-    fontSize: 11
+    ...theme.type.caption
   },
   statValue: {
     marginTop: 2,
     color: theme.colors.text,
-    fontFamily: theme.font.bold,
-    fontSize: 14
+    fontWeight: 'bold',
+    ...theme.type.bodyMd
   },
   modalFootnote: {
-    marginTop: 10,
+    marginTop: theme.spacing.sm,
     color: theme.colors.muted,
-    fontFamily: theme.font.regular,
-    fontSize: 11
+    ...theme.type.caption
   },
   bentoSection: {
-    marginBottom: 12
+    marginBottom: theme.spacing.md
   },
   bentoSectionDesktop: {
     alignItems: 'center'

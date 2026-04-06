@@ -21,9 +21,14 @@ const sharedTheme = {
     monoMedium: 'JetBrainsMono_500Medium'
   },
   type: {
+    caption: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontFamily: 'DMSans_500Medium' as const
+    },
     bodySm: {
-      fontSize: 12,
-      lineHeight: 16,
+      fontSize: 13,
+      lineHeight: 18,
       fontFamily: 'DMSans_500Medium' as const
     },
     bodyMd: {
@@ -38,14 +43,22 @@ const sharedTheme = {
     },
     sectionTitle: {
       fontSize: 18,
+      lineHeight: 24,
       fontFamily: 'DMSans_700Bold' as const
     },
     cardLabel: {
-      fontSize: 12,
+      fontSize: 13,
+      lineHeight: 16,
       fontFamily: 'DMSans_500Medium' as const
     },
     cardValue: {
-      fontSize: 24,
+      fontSize: 28,
+      lineHeight: 34,
+      fontFamily: 'JetBrainsMono_400Regular' as const
+    },
+    cardValueLarge: {
+      fontSize: 32,
+      lineHeight: 38,
       fontFamily: 'JetBrainsMono_400Regular' as const
     }
   },

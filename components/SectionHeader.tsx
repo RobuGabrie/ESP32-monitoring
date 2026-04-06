@@ -39,7 +39,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.md
   },
   titleWrap: {
@@ -47,7 +47,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 8
+    gap: theme.spacing.sm
   },
   title: {
     ...theme.type.sectionTitle,
@@ -59,13 +59,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.accents.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs
   },
   countText: {
     color: theme.colors.primary,
-    fontFamily: theme.font.medium,
-    fontSize: 12
+    ...theme.type.bodySm
   },
   actionButton: {
     minHeight: theme.touch.minTarget,
@@ -73,8 +72,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     justifyContent: 'center'
   },
   actionButtonPressed: {
@@ -82,7 +81,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   actionText: {
     color: theme.colors.primary,
-    fontFamily: theme.font.semiBold,
-    fontSize: 13
+    ...theme.type.bodySm
   }
 });
