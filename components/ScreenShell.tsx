@@ -12,6 +12,7 @@ interface Props {
   screenTitle?: string;
   screenSubtitle?: string;
   onExport?: () => void;
+  mqttStatus?: 'online' | 'offline';
   selectedRange?: TimeRangeKey;
   onRangeChange?: (range: TimeRangeKey) => void;
 }
@@ -56,6 +57,7 @@ function HeaderBar({
   themeMode,
   onToggleThemeMode,
   isDesktop,
+  mqttStatus,
   selectedRange,
   onRangeChange
 }: {
@@ -66,6 +68,7 @@ function HeaderBar({
   themeMode: 'light' | 'dark';
   onToggleThemeMode: () => void;
   isDesktop: boolean;
+  mqttStatus?: 'online' | 'offline';
   selectedRange?: TimeRangeKey;
   onRangeChange?: (range: TimeRangeKey) => void;
 }) {
@@ -105,24 +108,56 @@ function HeaderBar({
       }}
     >
       <View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={{ fontSize: 18, fontFamily: theme.font.bold, color: theme.colors.text }}>{title}</Text>
           <Text style={{ color: theme.colors.primary, fontSize: 13 }}>●</Text>
+          </View>
+          <View
+            style={{
+              backgroundColor: mqttStatus === 'online' ? 'rgba(61,220,132,0.12)' : 'rgba(232,64,64,0.12)',
+              borderWidth: 1,
+              borderColor: mqttStatus === 'online' ? 'rgba(61,220,132,0.28)' : 'rgba(232,64,64,0.28)',
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              borderRadius: 999
+            }}
+          >
+            <Text
+              style={{
+                color: mqttStatus === 'online' ? theme.colors.success : theme.colors.danger,
+                fontSize: 11,
+                fontFamily: theme.font.bold
+              }}
+            >
+              MQTT {mqttStatus === 'online' ? 'ON' : 'OFF'}
+            </Text>
+          </View>
         </View>
         <Text style={{ fontSize: 13, color: theme.colors.textSoft, marginTop: 2 }}>{subtitle}</Text>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Pressable onPress={onRangePress}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          width: isDesktop ? undefined : '100%',
+          justifyContent: isDesktop ? 'flex-end' : 'space-between'
+        }}
+      >
+        <Pressable onPress={onRangePress} style={{flexBasis: isDesktop ? undefined : '48%', flexGrow: isDesktop ? 0 : 1 }}>
           <TopBarPill theme={theme}>
             <Text style={{ fontSize: 14, color: theme.colors.textSoft }}>⏱</Text>
-            <Text style={{ fontSize: 13, color: theme.colors.textSoft, fontFamily: theme.font.medium }} numberOfLines={1}>
+            <Text style={{ fontSize: 14, color: theme.colors.textSoft, fontFamily: theme.font.medium }} numberOfLines={1}>
               {rangeLabel(activeRange)}
             </Text>
-            <Text style={{ fontSize: 13, color: theme.colors.muted }}>›</Text>
+            <Text style={{ fontSize: 14, color: theme.colors.muted }}>›</Text>
           </TopBarPill>
+          
         </Pressable>
-        <TopBarPill theme={theme}>
-          <Text style={{ fontSize: 13, color: theme.colors.textSoft, fontFamily: theme.font.medium }}>
+         <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9 }}>
+        <Text style={{ fontSize: 13, color: theme.colors.textSoft, fontFamily: theme.font.medium }}>
             {themeMode === 'dark' ? 'Dark' : 'Light'}
           </Text>
           <Switch
@@ -132,20 +167,10 @@ function HeaderBar({
             trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
             ios_backgroundColor={theme.colors.border}
           />
-        </TopBarPill>
-        {onExport && (
-          <Pressable
-            onPress={onExport}
-            style={{
-              backgroundColor: theme.colors.primary,
-              paddingHorizontal: isDesktop ? 18 : 14,
-              paddingVertical: isDesktop ? 10 : 9,
-              borderRadius: 8
-            }}
-          >
-            <Text style={{ color: '#fff', fontSize: 14, fontFamily: theme.font.bold }}>⚡ AI Export</Text>
           </Pressable>
-        )}
+      
+      
+      
       </View>
 
       {isWeb && rangeWebMenuVisible ? (
@@ -280,7 +305,7 @@ function HeaderBar({
   );
 }
 
-export function ScreenShell({ children, style, contentStyle, screenTitle, screenSubtitle, onExport, selectedRange, onRangeChange }: Props) {
+export function ScreenShell({ children, style, contentStyle, screenTitle, screenSubtitle, onExport, mqttStatus, selectedRange, onRangeChange }: Props) {
   const { theme, themeMode, toggleThemeMode } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
@@ -297,6 +322,7 @@ export function ScreenShell({ children, style, contentStyle, screenTitle, screen
           themeMode={themeMode}
           onToggleThemeMode={toggleThemeMode}
           isDesktop={isDesktop}
+          mqttStatus={mqttStatus}
           selectedRange={selectedRange}
           onRangeChange={onRangeChange}
         />

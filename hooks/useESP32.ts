@@ -922,6 +922,7 @@ const connectSharedMQTT = () => {
       advanceEndpoint();
     }
     getStoreState().setConnectionStatus('offline');
+    getStoreState().setMqttStatus('offline');
     scheduleSharedReconnect();
   };
 
@@ -937,6 +938,7 @@ const connectSharedMQTT = () => {
     sharedLastMessageAt = Date.now();
     clearSharedReconnect();
     getStoreState().setConnectionStatus('online');
+    getStoreState().setMqttStatus('online');
     client.subscribe([MQTT_TOPIC, MQTT_RAW_TOPIC, MQTT_STATE_TOPIC], (err) => {
       if (err) {
         handleDisconnect(true);
@@ -970,6 +972,7 @@ const connectSharedMQTT = () => {
 
         sharedLastMessageAt = Date.now();
         getStoreState().setConnectionStatus('online');
+        getStoreState().setMqttStatus('online');
         const snapshot = getStoreState().data;
         getStoreState().addLog({
           ts: raw.ts,
@@ -993,6 +996,7 @@ const connectSharedMQTT = () => {
 
       sharedLastMessageAt = Date.now();
       getStoreState().setConnectionStatus('online');
+      getStoreState().setMqttStatus('online');
       const previous = getStoreState().data;
       const ts = extractTimestamp(parsed) ?? format(now, 'HH:mm:ss.SSS');
       getStoreState().pushReading(
@@ -1074,6 +1078,7 @@ const ensureSharedConnection = () => {
       const now = new Date();
       const ts = format(now, 'HH:mm:ss.SSS');
       getStoreState().setConnectionStatus('online');
+      getStoreState().setMqttStatus('online');
       getStoreState().pushReading(mockData(sharedTick), ts);
     };
 
@@ -1097,6 +1102,9 @@ const ensureSharedConnection = () => {
       const ts = format(new Date(), 'HH:mm:ss.SSS');
       const socketConnected = Boolean(sharedClient?.connected);
       getStoreState().setConnectionStatus(socketConnected ? 'online' : 'offline');
+      // MQTT badge reflects actual data freshness, not just broker socket state.
+      // If no data for 5s, the ESP32 is not sending — mark MQTT as offline.
+      getStoreState().setMqttStatus('offline');
       getStoreState().pushReading(buildZeroReadingFromStore(), ts);
       sharedLastMessageAt = Date.now();
     }
@@ -1117,6 +1125,7 @@ export const useESP32 = () => {
   const powerHistory = useStore((s) => s.powerHistory);
   const historyTimeline = useStore((s) => s.historyTimeline);
   const status = useStore((s) => s.connectionStatus);
+  const mqttStatus = useStore((s) => s.mqttStatus);
   const selectedRange = useStore((s) => s.selectedRange);
   const setTimeRange = useStore((s) => s.setTimeRange);
   const ioLog = useStore((s) => s.ioLog);
@@ -1202,6 +1211,7 @@ export const useESP32 = () => {
     data,
     history,
     status,
+    mqttStatus,
     ioLog: filteredLog,
     selectedRange,
     setTimeRange,

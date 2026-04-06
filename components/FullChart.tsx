@@ -298,22 +298,6 @@ export function FullChart({
     <View style={[styles.card, { minHeight: height }]}> 
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      {showLegend && chartStats ? (
-        <View style={styles.statsFooter}>
-          <View style={styles.statCell}>
-            <Text style={styles.statCellLabel}>Curent</Text>
-            <Text style={styles.statCellVal}>{label(latestValue)}</Text>
-          </View>
-          <View style={[styles.statCell, styles.statCellBorder]}>
-            <Text style={styles.statCellLabel}>Medie</Text>
-            <Text style={styles.statCellVal}>{label((chartStats.minV + chartStats.maxV) / 2)}</Text>
-          </View>
-          <View style={[styles.statCell, styles.statCellBorder]}>
-            <Text style={styles.statCellLabel}>Max</Text>
-            <Text style={styles.statCellVal}>{label(chartStats.maxV)}</Text>
-          </View>
-        </View>
-      ) : null}
       <Animated.View
         style={[
           styles.chartWrap,
@@ -450,8 +434,26 @@ export function FullChart({
             );
           })}
         </View>
+        
       </Animated.View>
+        {showLegend && chartStats ? (
+        <View style={styles.statsFooter}>
+          <View style={styles.statCell}>
+            <Text style={styles.statCellLabel}>CURENT</Text>
+            <Text style={styles.statCellVal}>{label(latestValue)}</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={styles.statCellLabel}>MEDIE</Text>
+            <Text style={styles.statCellVal}>{label((chartStats.minV + chartStats.maxV) / 2)}</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={styles.statCellLabel}>MAX</Text>
+            <Text style={styles.statCellVal}>{label(chartStats.maxV)}</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
+    
   );
 }
 
@@ -463,7 +465,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   title: {
     marginTop: 10,
@@ -484,29 +486,27 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: 8
   },
   statsFooter: {
-    marginTop: 8,
-    marginBottom: 4,
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
-    paddingTop: 10
+    paddingTop: 12,
+    paddingHorizontal: 8,
+    paddingBottom: 16
   },
   statCell: {
     flex: 1,
     alignItems: 'center'
   },
-  statCellBorder: {
-    borderLeftWidth: 1,
-    borderLeftColor: theme.colors.border
-  },
   statCellLabel: {
     fontSize: 11,
     color: theme.colors.textSoft,
     fontFamily: theme.font.medium,
-    marginBottom: 4
+    marginBottom: 3
   },
   statCellVal: {
-    fontSize: 17,
+    fontSize: 20,
     color: theme.colors.text,
     fontFamily: theme.font.mono,
     fontWeight: '700'

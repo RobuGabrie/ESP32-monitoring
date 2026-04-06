@@ -119,11 +119,13 @@ interface StoreState {
   peakCurrent: number;
   moduleStates: ModuleStates;
   connectionStatus: ConnectionStatus;
+  mqttStatus: ConnectionStatus;
   selectedRange: TimeRangeKey;
   themeMode: ThemeMode;
   ioLog: IOLogEntry[];
   pushReading: (data: ESP32Data, ts: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
+  setMqttStatus: (status: ConnectionStatus) => void;
   setModuleState: (module: ModuleName, enabled: boolean) => void;
   setModuleStates: (states: Partial<ModuleStates>) => void;
   setTimeRange: (range: TimeRangeKey) => void;
@@ -193,6 +195,7 @@ const baseData = (): StoreData => ({
     cpuStress: false
   },
   connectionStatus: 'offline',
+  mqttStatus: 'offline',
   selectedRange: '60s',
   themeMode: 'dark',
   ioLog: []
@@ -234,6 +237,12 @@ const actions = {
       return;
     }
     setData({ connectionStatus: status });
+  },
+  setMqttStatus: (status: ConnectionStatus) => {
+    if (storeData.mqttStatus === status) {
+      return;
+    }
+    setData({ mqttStatus: status });
   },
   setModuleState: (module: ModuleName, enabled: boolean) => {
     setData({

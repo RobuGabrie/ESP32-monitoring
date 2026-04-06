@@ -1,14 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Easing, Modal, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { BarChart } from '@/components/BarChart';
 import { BatteryHeroCard } from '@/components/BatteryHeroCard';
+import { BentoSensorsGrid } from '@/components/BentoSensorsGrid';
 import { FullChart } from '@/components/FullChart';
-import { PowerBarsCard } from '@/components/PowerBarsCard';
 import { ScreenShell } from '@/components/ScreenShell';
-import { SensorMiniGrid } from '@/components/SensorMiniGrid';
 import { AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
@@ -25,6 +25,54 @@ type DashboardCard = {
   detailLabel: (v: number) => string;
 };
 
+const parsePayloadTimestamp = (value?: string, fallbackMs?: number): Date | null => {
+  if (value && value.trim()) {
+    const trimmed = value.trim();
+    const asNumber = Number(trimmed);
+
+    if (Number.isFinite(asNumber) && /^\d+(\.\d+)?$/.test(trimmed)) {
+      const epochMs = asNumber > 1_000_000_000_000 ? asNumber : asNumber > 1_000_000_000 ? asNumber * 1000 : asNumber;
+      const date = new Date(epochMs);
+      if (Number.isFinite(date.getTime())) {
+        return date;
+      }
+    }
+
+    const direct = new Date(trimmed);
+    if (Number.isFinite(direct.getTime())) {
+      return direct;
+    }
+
+    const withIsoSeparator = new Date(trimmed.replace(' ', 'T'));
+    if (Number.isFinite(withIsoSeparator.getTime())) {
+      return withIsoSeparator;
+    }
+  }
+
+  if (typeof fallbackMs === 'number' && Number.isFinite(fallbackMs) && fallbackMs > 0) {
+    const fallbackDate = new Date(fallbackMs);
+    if (Number.isFinite(fallbackDate.getTime())) {
+      return fallbackDate;
+    }
+  }
+
+  return null;
+};
+
+const formatClockTime = (date: Date) => {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+};
+
+const formatCalendarDate = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+};
+
 const getNiceMax = (value: number, step: number, floor: number) => {
   const scaled = Math.ceil(Math.max(value, floor) / step) * step;
   return Number.isFinite(scaled) ? scaled : floor;
@@ -33,10 +81,12 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 export default function OverviewScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { data, history, status, ioLog, moduleStates, totalCurrentMah, peakCurrent, selectedRange, setTimeRange } = useESP32();
+  const { data, history, status, mqttStatus, ioLog, moduleStates, totalCurrentMah, peakCurrent, selectedRange, setTimeRange } = useESP32();
   const { width } = useWindowDimensions();
   const [selectedCmd, setSelectedCmd] = useState<ModuleName | null>(null);
+  const livePulse = useRef(new Animated.Value(1)).current;
   const isDesktop = width >= 768;
+  const isCompactDesktopRtc = isDesktop && width < 1220;
   const renderWindow = isDesktop ? 900 : 480;
 
   const onExportPress = useCallback(async () => {
@@ -150,7 +200,46 @@ export default function OverviewScreen() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
+  const offline = mqttStatus === 'offline';
+  const rtcDate = parsePayloadTimestamp(data?.timestamp, data?.recordedAtMs);
+  const rtcAgeSeconds = rtcDate ? Math.max(0, (Date.now() - rtcDate.getTime()) / 1000) : null;
+  const rtcIsFresh = typeof rtcAgeSeconds === 'number' ? rtcAgeSeconds <= 90 : false;
+  const rtcAgeLabel = typeof rtcAgeSeconds === 'number'
+    ? rtcAgeSeconds < 60
+      ? `${Math.floor(rtcAgeSeconds)}s in urma`
+      : `${Math.floor(rtcAgeSeconds / 60)}m in urma`
+    : 'fara sincronizare';
+  const rtcFreshnessPercent = rtcDate ? Math.max(0, 100 - Math.min(100, ((rtcAgeSeconds ?? 0) / 180) * 100)) : 0;
+
+  useEffect(() => {
+    if (!rtcIsFresh || offline || !rtcDate) {
+      livePulse.setValue(1);
+      return;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(livePulse, { toValue: 0.25, duration: 640, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(livePulse, { toValue: 1, duration: 640, easing: Easing.inOut(Easing.quad), useNativeDriver: true })
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [rtcIsFresh, offline, rtcDate, livePulse]);
+
   const sensorItems = useMemo(() => [
+    {
+      label: 'WIFI LINK',
+      value: data?.ip && data.ip !== '--' ? data.ip : '--',
+      unit: '',
+      barPercent: Math.min(100, Math.max(0, ((data?.channel ?? 0) / 13) * 100)),
+      barColor: 'green' as const,
+      accentColor: theme.chart.palette.rssi,
+      trend: `CH ${(data?.channel ?? 0) > 0 ? data?.channel : '--'} · MAC ${data?.mac ?? '--'}`,
+      icon: 'link-outline' as const,
+      layout: 'wide' as const,
+      isStale: offline || !data?.ip || data.ip === '--'
+    },
     {
       label: 'TEMPERATURĂ NTC',
       value: (data?.temp ?? 0).toFixed(1),
@@ -159,17 +248,21 @@ export default function OverviewScreen() {
       barColor: 'orange' as const,
       paletteKey: 'temperature' as const,
       trend: `${(data?.temp ?? 0) >= 35 ? '⚠ Ridicat' : '✓ Normal'}`,
-      icon: 'thermometer-outline' as const
+      icon: 'thermometer-outline' as const,
+      layout: 'tall' as const,
+      isStale: offline || (data?.temp ?? 0) === 0
     },
     {
-      label: 'TENSIUNE INA219',
-      value: (data?.volt ?? 0).toFixed(2),
-      unit: 'V',
-      barPercent: Math.min(100, ((data?.volt ?? 0) / 5) * 100),
+      label: 'WIFI RSSI',
+      value: Math.round(data?.rssi ?? -99).toString(),
+      unit: 'dBm',
+      barPercent: Math.min(100, Math.max(0, ((data?.rssi ?? -99) + 100) * 2)),
       barColor: 'green' as const,
-      paletteKey: 'voltage' as const,
-      trend: `${(data?.volt ?? 0) >= 3.3 ? '✓ Normal' : '⚠ Scăzut'}`,
-      icon: 'flash-outline' as const
+      accentColor: (data?.rssi ?? -99) > -70 ? theme.colors.success : theme.colors.primary,
+      trend: `SSID ${data?.ssid ?? '--'}`,
+      icon: 'wifi-outline' as const,
+      layout: 'tall' as const,
+      isStale: offline || (data?.rssi ?? -99) <= -99
     },
     {
       label: 'CURENT TOTAL',
@@ -179,7 +272,21 @@ export default function OverviewScreen() {
       barColor: 'orange' as const,
       paletteKey: 'current' as const,
       trend: `${((data?.powerMw ?? 0) / 1000).toFixed(2)} W · ${(data?.volt ?? 0).toFixed(2)} V`,
-      icon: 'battery-charging-outline' as const
+      icon: 'battery-charging-outline' as const,
+      layout: 'wide' as const,
+      isStale: offline || ((data?.current ?? 0) === 0 && (data?.volt ?? 0) === 0)
+    },
+    {
+      label: 'TENSIUNE INA219',
+      value: (data?.volt ?? 0).toFixed(2),
+      unit: 'V',
+      barPercent: Math.min(100, ((data?.volt ?? 0) / 5) * 100),
+      barColor: 'green' as const,
+      paletteKey: 'voltage' as const,
+      trend: `${(data?.volt ?? 0) >= 3.3 ? '✓ Normal' : '⚠ Scăzut'}`,
+      icon: 'flash-outline' as const,
+      layout: 'small' as const,
+      isStale: offline || (data?.volt ?? 0) === 0
     },
     {
       label: 'IMU ROLL',
@@ -189,15 +296,8 @@ export default function OverviewScreen() {
       barColor: 'green' as const,
       paletteKey: 'imu' as const,
       icon: 'compass-outline' as const,
-    },
-    {
-      label: 'IMU PITCH',
-      value: (data?.pitch ?? 0).toFixed(1),
-      unit: '°',
-      barPercent: Math.min(100, Math.max(0, (Math.abs(data?.pitch ?? 0) / 90) * 100)),
-      barColor: 'green' as const,
-      paletteKey: 'imu' as const,
-      icon: 'compass-outline' as const,
+      layout: 'small' as const,
+      isStale: offline || data?.imuMode === undefined
     },
     {
       label: 'UPTIME ESP32',
@@ -207,8 +307,10 @@ export default function OverviewScreen() {
       barColor: 'orange' as const,
       paletteKey: 'uptime' as const,
       icon: 'time-outline' as const,
+      layout: 'small' as const,
+      isStale: offline || (data?.uptime ?? 0) === 0
     }
-  ], [data]);
+  ], [data, theme, offline]);
 
   const batteryPercent = data?.batteryPercent ?? 0;
   const currentMa = data?.current ?? 0;
@@ -222,8 +324,9 @@ export default function OverviewScreen() {
         <ScreenShell
           contentStyle={styles.pageShell}
           screenTitle="ESP32 Monitor"
-          screenSubtitle="Telemetrie în timp real · SUDO"
+          screenSubtitle={status === 'offline' ? 'ESP32 deconectat · date vechi' : 'Telemetrie în timp real · SUDO'}
           onExport={onExportPress}
+          mqttStatus={mqttStatus}
           selectedRange={selectedRange}
           onRangeChange={setTimeRange}
         >
@@ -264,6 +367,8 @@ export default function OverviewScreen() {
             </Pressable>
           </View>
         </View>
+          {/* Row 4: Bento sensor grid */}
+        
 
         {/* Row 2: Bar Chart + Battery % Card */}
         <View style={[styles.heroRow, isDesktop && styles.heroRowDesktop]}>
@@ -298,22 +403,10 @@ export default function OverviewScreen() {
           </View>
         </View>
 
-        {/* Row 3: Sensor mini cards */}
-        <SensorMiniGrid
-          items={sensorItems}
-          onItemPress={(item) => {
-            const cmd = item.label === 'CURENT TOTAL' ? 'current'
-              : item.label === 'TEMPERATURĂ NTC' ? 'temperature'
-              : item.label === 'CPU LOAD' ? 'cpu'
-              : null;
-            if (cmd) {
-              setSelectedCmd(cmd as ModuleName);
-            } else {
-              Alert.alert(item.label, `${item.value} ${item.unit}${item.trend ? `\n${item.trend}` : ''}`);
-            }
-          }}
-        />
-
+      
+<View style={[styles.bentoSection, isDesktop && styles.bentoSectionDesktop]}>
+          <BentoSensorsGrid data={data} isConnected={!offline} />
+        </View>
         </ScreenShell>
       </ScrollView>
 
@@ -422,6 +515,154 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
     marginBottom: 0
   },
+  sensorRtcRow: {
+    flexDirection: 'column',
+    gap: 12,
+    marginBottom: 12
+  },
+  sensorRtcRowDesktop: {
+    flexDirection: 'row',
+    alignItems: 'stretch'
+  },
+  sensorGridCol: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden'
+  },
+  sensorGridColDesktop: {
+    flexBasis: '70%',
+    flexShrink: 1
+  },
+  rtcCard: {
+    marginTop: 2,
+    marginBottom: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    overflow: 'hidden',
+    position: 'relative',
+    ...theme.shadow.card
+  },
+  rtcCardDesktop: {
+    flexBasis: '30%',
+    maxWidth: 360,
+    minWidth: 270
+  },
+  rtcCardDesktopCompact: {
+    flexBasis: '34%',
+    minWidth: 250,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  rtcGlowSvg: {
+    ...StyleSheet.absoluteFillObject
+  },
+  rtcCardStale: {
+    borderColor: 'rgba(232,64,64,0.22)',
+    backgroundColor: 'rgba(232,64,64,0.04)',
+    borderStyle: 'dashed' as const
+  },
+  rtcHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  rtcTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  rtcTitle: {
+    fontSize: 11,
+    color: theme.colors.textSoft,
+    fontFamily: theme.font.medium,
+    letterSpacing: 0.8
+  },
+  rtcBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5
+  },
+  rtcLivePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#06B6D4'
+  },
+  rtcBadgeLive: {
+    borderColor: 'rgba(6,182,212,0.35)',
+    backgroundColor: 'rgba(6,182,212,0.14)'
+  },
+  rtcBadgeLate: {
+    borderColor: 'rgba(232,84,42,0.35)',
+    backgroundColor: 'rgba(232,84,42,0.12)'
+  },
+  rtcBadgeText: {
+    fontSize: 10,
+    fontFamily: theme.font.bold,
+    letterSpacing: 0.6
+  },
+  rtcBadgeTextLive: {
+    color: '#0e7490'
+  },
+  rtcBadgeTextLate: {
+    color: theme.colors.primary
+  },
+  rtcTimeValue: {
+    marginTop: 8,
+    fontSize: 30,
+    lineHeight: 34,
+    color: theme.colors.text,
+    fontFamily: theme.font.mono,
+    fontWeight: '700'
+  },
+  rtcTimeValueCompact: {
+    fontSize: 24,
+    lineHeight: 29
+  },
+  rtcTimeValueStale: {
+    color: theme.colors.muted
+  },
+  rtcMetaRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10
+  },
+  rtcAgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  rtcDateText: {
+    fontSize: 12,
+    color: theme.colors.textSoft,
+    fontFamily: theme.font.medium
+  },
+  rtcAgeText: {
+    fontSize: 12,
+    color: theme.colors.muted,
+    fontFamily: theme.font.medium
+  },
+  rtcFreshTrack: {
+    height: 4,
+    borderRadius: 3,
+    marginTop: 10,
+    backgroundColor: theme.colors.border,
+    overflow: 'hidden'
+  },
+  rtcFreshFill: {
+    height: '100%',
+    borderRadius: 3
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -502,5 +743,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.font.regular,
     fontSize: 11
+  },
+  bentoSection: {
+    marginBottom: 12
+  },
+  bentoSectionDesktop: {
+    alignItems: 'center'
   }
 });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { AppTheme } from '@/constants/theme';
@@ -16,7 +17,10 @@ interface Props {
 
 export function BatteryHeroCard({ percent, voltage, current, powerW, estimatedHours, style }: Props) {
   const { theme, themeMode } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const gradientIdRef = useRef(`batteryGlow${Math.random().toString(36).slice(2, 9)}`);
   const isLight = themeMode === 'light';
+  const isCompact = width < 390;
   const styles = useMemo(() => createStyles(theme, isLight), [theme, isLight]);
   const blinkAnim = useRef(new Animated.Value(1)).current;
 
@@ -35,6 +39,18 @@ export function BatteryHeroCard({ percent, voltage, current, powerW, estimatedHo
   const hoursLabel = estimatedHours > 0 ? `${Math.round(estimatedHours)}` : '--';
   const accentStrong = isLight ? '232,84,42' : '61,220,132';
   const accentSoft = isLight ? '217,119,6' : '34,197,94';
+  const glowLayerOpacity = isCompact ? (isLight ? 0.58 : 0.5) : 0.78;
+  const bandStartAlpha = isCompact ? (isLight ? 0.12 : 0.1) : isLight ? 0.18 : 0.14;
+  const bandMidAlpha = isCompact ? (isLight ? 0.07 : 0.06) : isLight ? 0.12 : 0.09;
+  const sweepStartAlpha = isCompact ? (isLight ? 0.09 : 0.08) : isLight ? 0.14 : 0.12;
+  const bandId = `${gradientIdRef.current}-band`;
+  const sweepId = `${gradientIdRef.current}-sweep`;
+  const bandRect = isCompact
+    ? { x: 118, y: 118, width: 198, height: 148, radius: 38, rotate: -14, cx: 217, cy: 192 }
+    : { x: 148, y: 114, width: 220, height: 160, radius: 42, rotate: -18, cx: 258, cy: 194 };
+  const sweepRect = isCompact
+    ? { x: 196, y: -8, width: 96, height: 168, radius: 24, rotate: 14, cx: 244, cy: 76 }
+    : { x: 224, y: -6, width: 106, height: 180, radius: 28, rotate: 20, cx: 277, cy: 84 };
 
   return (
     <View style={[styles.card, style]}>
@@ -76,26 +92,43 @@ export function BatteryHeroCard({ percent, voltage, current, powerW, estimatedHo
       {/* Glow overlay - radial gradients for a true fade-out effect */}
       <Svg
         pointerEvents="none"
-        style={styles.glowSvg}
+        style={[styles.glowSvg, { opacity: glowLayerOpacity }]}
         width="100%"
         height="100%"
         viewBox="0 0 320 220"
         preserveAspectRatio="none"
       >
         <Defs>
-          <LinearGradient id="accentBand" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={`rgba(${accentStrong},${isLight ? 0.24 : 0.16})`} />
-            <Stop offset="55%" stopColor={`rgba(${accentSoft},${isLight ? 0.16 : 0.1})`} />
-            <Stop offset="100%" stopColor="rgba(0,0,0,0)" />
+          <LinearGradient id={bandId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={`rgb(${accentStrong})`} stopOpacity={bandStartAlpha} />
+            <Stop offset="52%" stopColor={`rgb(${accentSoft})`} stopOpacity={bandMidAlpha} />
+            <Stop offset="100%" stopColor={`rgb(${accentSoft})`} stopOpacity={0} />
           </LinearGradient>
-          <LinearGradient id="accentSweep" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor={`rgba(${accentStrong},${isLight ? 0.18 : 0.14})`} />
-            <Stop offset="100%" stopColor="rgba(0,0,0,0)" />
+          <LinearGradient id={sweepId} x1="0%" y1="0%" x2="0%" y2="100%">
+            <Stop offset="0%" stopColor={`rgb(${accentStrong})`} stopOpacity={sweepStartAlpha} />
+            <Stop offset="58%" stopColor={`rgb(${accentSoft})`} stopOpacity={isCompact ? 0.03 : 0.05} />
+            <Stop offset="100%" stopColor={`rgb(${accentSoft})`} stopOpacity={0} />
           </LinearGradient>
         </Defs>
 
-        <Rect x="148" y="114" width="220" height="160" rx="42" fill="url(#accentBand)" transform="rotate(-18 258 194)" />
-        <Rect x="224" y="-6" width="106" height="180" rx="28" fill="url(#accentSweep)" transform="rotate(20 277 84)" />
+        <Rect
+          x={bandRect.x}
+          y={bandRect.y}
+          width={bandRect.width}
+          height={bandRect.height}
+          rx={bandRect.radius}
+          fill={`url(#${bandId})`}
+          transform={`rotate(${bandRect.rotate} ${bandRect.cx} ${bandRect.cy})`}
+        />
+        <Rect
+          x={sweepRect.x}
+          y={sweepRect.y}
+          width={sweepRect.width}
+          height={sweepRect.height}
+          rx={sweepRect.radius}
+          fill={`url(#${sweepId})`}
+          transform={`rotate(${sweepRect.rotate} ${sweepRect.cx} ${sweepRect.cy})`}
+        />
       </Svg>
     </View>
   );
