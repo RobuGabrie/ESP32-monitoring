@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, Pressable, Modal } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View, Pressable, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -97,6 +97,205 @@ const sensorIcon = (type: SensorDetail['type']): keyof typeof Ionicons.glyphMap 
   type === 'analog' ? 'analytics-outline' :
   'battery-charging-outline';
 
+// ─── ESP32-C3 Super Mini Pinout (matches physical board layout) ─────────────
+
+type PinCategory = 'i2c' | 'button' | 'adc' | 'interrupt' | 'gpio' | 'power' | 'spi';
+
+const PIN_COLORS: Record<PinCategory, string> = {
+  power:     '#5E5CE6',
+  i2c:       '#4A9EFF',
+  spi:       '#BF5AF2',
+  button:    '#FF9F0A',
+  adc:       '#30D158',
+  interrupt: '#FF453A',
+  gpio:      '#8E8E93',
+};
+
+type PinDef = {
+  gpio: string;     // e.g. "GPIO5"
+  alt: string;      // e.g. "A3" or "D3"
+  fn: string;       // e.g. "SDA" or user-assigned function
+  category: PinCategory;
+};
+
+// Left side — top (USB) to bottom — as seen on the reference image
+const LEFT_PINS: PinDef[] = [
+  { gpio: 'GPIO5',  alt: 'A3 / D3',   fn: 'GPIO 5',    category: 'gpio'   },
+  { gpio: 'GPIO6',  alt: 'SDA / D4',   fn: 'GPIO 6',    category: 'gpio'   },
+  { gpio: 'GPIO7',  alt: 'SCL / D5',   fn: 'GPIO 7',    category: 'gpio'   },
+  { gpio: 'GPIO8',  alt: 'SCK / D8',   fn: 'I2C SDA',   category: 'i2c'    },
+  { gpio: 'GPIO9',  alt: 'MISO / D9',  fn: 'I2C SCL',   category: 'i2c'    },
+  { gpio: 'GPIO10', alt: 'MOSI / D10', fn: 'INA INT',    category: 'interrupt' },
+  { gpio: 'GPIO20', alt: 'RX / D7',    fn: 'GPIO 20',   category: 'gpio'   },
+  { gpio: 'GPIO21', alt: 'TX / D6',    fn: 'GPIO 21',   category: 'gpio'   },
+];
+
+// Right side — top (USB) to bottom
+const RIGHT_PINS: PinDef[] = [
+  { gpio: '5V',     alt: '',           fn: 'VIN',        category: 'power'  },
+  { gpio: 'GND',    alt: '',           fn: 'Ground',     category: 'power'  },
+  { gpio: '3V3',    alt: '',           fn: '3.3V Out',   category: 'power'  },
+  { gpio: 'GPIO4',  alt: 'A2 / D2',   fn: 'BTN Prev',   category: 'button' },
+  { gpio: 'GPIO3',  alt: 'A1 / D1',   fn: 'BTN Next',   category: 'button' },
+  { gpio: 'GPIO2',  alt: 'A0 / D0',   fn: 'GPIO 2',     category: 'gpio'   },
+  { gpio: 'GPIO1',  alt: 'ADC1-1',    fn: 'GPIO 1',     category: 'gpio'   },
+  { gpio: 'GPIO0',  alt: 'ADC1-0',    fn: 'Thermistor', category: 'adc'    },
+];
+
+const LEGEND: { cat: PinCategory; label: string }[] = [
+  { cat: 'power',     label: 'Power'      },
+  { cat: 'i2c',       label: 'I2C Bus'    },
+  { cat: 'button',    label: 'Button'     },
+  { cat: 'adc',       label: 'Thermistor' },
+  { cat: 'interrupt', label: 'INA Alert'  },
+  { cat: 'gpio',      label: 'GPIO'       },
+];
+
+function PinConnector({ color, pointRight }: { color: string; pointRight: boolean }) {
+  // A dashed line with a small triangular arrowhead pointing toward the chip
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {pointRight && (
+        <View style={{
+          width: 0, height: 0,
+          borderTopWidth: 4, borderBottomWidth: 4, borderLeftWidth: 5,
+          borderTopColor: 'transparent', borderBottomColor: 'transparent',
+          borderLeftColor: color,
+          marginRight: 1,
+        }} />
+      )}
+      <View style={{
+        width: 16,
+        height: 1,
+        borderStyle: 'dashed',
+        borderTopWidth: 1,
+        borderColor: color,
+      }} />
+      {!pointRight && (
+        <View style={{
+          width: 0, height: 0,
+          borderTopWidth: 4, borderBottomWidth: 4, borderRightWidth: 5,
+          borderTopColor: 'transparent', borderBottomColor: 'transparent',
+          borderRightColor: color,
+          marginLeft: 1,
+        }} />
+      )}
+    </View>
+  );
+}
+
+function PinLabel({ pin, side, styles }: {
+  pin: PinDef;
+  side: 'left' | 'right';
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const c = PIN_COLORS[pin.category];
+  const isLeft = side === 'left';
+
+  // Left reads outward:  fn → alt →──▶ [badge] → chip
+  // Right reads outward: chip → [badge] ▶──→ alt → fn
+  if (isLeft) {
+    return (
+      <View style={[styles.pinLabelRow, styles.pinLabelRowLeft]}>
+        <Text style={[styles.pinFnText, { textAlign: 'right' }]} numberOfLines={1}>{pin.fn}</Text>
+        {pin.alt ? (
+          <Text style={[styles.pinAltText, { textAlign: 'right' }]} numberOfLines={1}>{pin.alt}</Text>
+        ) : (
+          <View style={styles.pinAltSpacer} />
+        )}
+        <PinConnector color={c + 'AA'} pointRight={false} />
+        <View style={[styles.pinBadge, { backgroundColor: c + '20', borderColor: c + '55' }]}>
+          <Text style={[styles.pinBadgeText, { color: c }]}>{pin.gpio}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.pinLabelRow, styles.pinLabelRowRight]}>
+      <View style={[styles.pinBadge, { backgroundColor: c + '20', borderColor: c + '55' }]}>
+        <Text style={[styles.pinBadgeText, { color: c }]}>{pin.gpio}</Text>
+      </View>
+      <PinConnector color={c + 'AA'} pointRight={true} />
+      {pin.alt ? (
+        <Text style={[styles.pinAltText, { textAlign: 'left' }]} numberOfLines={1}>{pin.alt}</Text>
+      ) : (
+        <View style={styles.pinAltSpacer} />
+      )}
+      <Text style={[styles.pinFnText, { textAlign: 'left' }]} numberOfLines={1}>{pin.fn}</Text>
+    </View>
+  );
+}
+
+function PinoutCard({ theme }: { theme: AppTheme }) {
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  return (
+    <View style={styles.pinoutCard}>
+      {/* Header */}
+      <View style={styles.pinoutHeaderRow}>
+        <View style={styles.pinoutTitleWrap}>
+          <Ionicons name="hardware-chip-outline" size={18} color={theme.colors.primary} />
+          <Text style={styles.pinoutTitle}>ESP32-C3 Super Mini</Text>
+        </View>
+        <Text style={styles.pinoutSubtitle}>RISC-V · 160 MHz · Wi-Fi / BLE</Text>
+      </View>
+
+      {/* Board diagram */}
+      <View style={styles.boardContainer}>
+        {/* Left column */}
+        <View style={styles.boardSide}>
+          {LEFT_PINS.map((p) => (
+            <PinLabel key={p.gpio} pin={p} side="left" styles={styles} />
+          ))}
+        </View>
+
+        {/* Central chip representation */}
+        <View style={styles.boardChip}>
+          {/* USB-C hint */}
+          <View style={styles.usbStub}>
+            <Text style={styles.usbText}>USB-C</Text>
+          </View>
+          {/* Pin dots — left */}
+          <View style={styles.chipPinCol}>
+            {LEFT_PINS.map((p, i) => (
+              <View key={i} style={[styles.chipPinDot, { backgroundColor: PIN_COLORS[p.category] }]} />
+            ))}
+          </View>
+          {/* Chip label */}
+          <View style={styles.chipCenter}>
+            <Text style={styles.chipMainLabel}>ESP32</Text>
+            <Text style={styles.chipSubLabel}>C3</Text>
+          </View>
+          {/* Pin dots — right */}
+          <View style={styles.chipPinCol}>
+            {RIGHT_PINS.map((p, i) => (
+              <View key={i} style={[styles.chipPinDot, { backgroundColor: PIN_COLORS[p.category] }]} />
+            ))}
+          </View>
+        </View>
+
+        {/* Right column */}
+        <View style={styles.boardSide}>
+          {RIGHT_PINS.map((p) => (
+            <PinLabel key={p.gpio} pin={p} side="right" styles={styles} />
+          ))}
+        </View>
+      </View>
+
+      {/* Legend */}
+      <View style={styles.pinoutLegend}>
+        {LEGEND.map(({ cat, label }) => (
+          <View key={cat} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: PIN_COLORS[cat] }]} />
+            <Text style={styles.legendLabel}>{label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 // Compact SensorTile - tapping opens the detail modal
 function SensorTile({ sensor, onPress, theme }: {
   sensor: SensorDetail;
@@ -108,7 +307,7 @@ function SensorTile({ sensor, onPress, theme }: {
   return (
     <Pressable
       style={({ pressed }) => [styles.sensorTile, pressed && styles.sensorTilePressed]}
-      onPress={onPress}
+      onPressIn={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${sensor.label} – ${sensor.sensor ?? sensor.type}`}
     >
@@ -222,8 +421,10 @@ function SensorDetailModal({ sensor, visible, onClose, theme }: {
 export default function SensorsScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { ioLog, status, data, selectedRange, setTimeRange } = useESP32();
+  const { ioLog, status, data, selectedRange, setTimeRange, mqttStatus } = useESP32();
   const [selectedPin, setSelectedPin] = useState<string | null>(null);
+  const [serialOpen, setSerialOpen] = useState(false);
+  const serialScrollRef = useRef<ScrollView>(null);
 
   const entries = ioLog.filter((entry) => entry.rawText || Object.keys(entry.gpio ?? {}).length > 0 || Object.keys(entry.pcf8591Raw ?? {}).length > 0 || Object.keys(entry.ina219Raw ?? {}).length > 0);
   const latest = [...entries].reverse().find((entry) => Object.keys(entry.gpio ?? {}).length > 0 || Object.keys(entry.pcf8591Raw ?? {}).length > 0 || Object.keys(entry.ina219Raw ?? {}).length > 0);
@@ -373,6 +574,7 @@ export default function SensorsScreen() {
           screenSubtitle="Monitorizare live GPIO si senzori"
           selectedRange={selectedRange}
           onRangeChange={setTimeRange}
+          mqttStatus={mqttStatus}
         >
 
           {/* Quick stats bar */}
@@ -392,6 +594,21 @@ export default function SensorsScreen() {
               <Text style={styles.quickStatLabel}>Monitored</Text>
             </View>
           </View>
+
+          {/* Serial monitor button */}
+          <Pressable
+            style={({ pressed }) => [styles.serialBtn, pressed && styles.serialBtnPressed]}
+            onPressIn={() => setSerialOpen(true)}
+          >
+            <Ionicons name="terminal-outline" size={16} color={theme.colors.textSoft} />
+            <Text style={styles.serialBtnText}>Serial Monitor</Text>
+            <View style={styles.serialBtnBadge}>
+              <Text style={styles.serialBtnBadgeText}>{entries.length}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.colors.muted} style={{ marginLeft: 'auto' }} />
+          </Pressable>
+
+          <PinoutCard theme={theme} />
 
           {/* I2C Devices - compact list */}
           <View style={styles.panel}>
@@ -460,6 +677,57 @@ export default function SensorsScreen() {
         </ScreenShell>
       </ScrollView>
 
+      {/* Serial monitor modal */}
+      <Modal
+        visible={serialOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSerialOpen(false)}
+      >
+        <SafeAreaView style={styles.serialContainer}>
+          <View style={styles.serialHeader}>
+            <View style={styles.serialHeaderLeft}>
+              <View style={styles.serialIconWrap}>
+                <Ionicons name="terminal-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.serialTitle}>Serial Monitor</Text>
+                <Text style={styles.serialSubtitle}>{entries.length} packets captured</Text>
+              </View>
+            </View>
+            <Pressable
+              style={styles.serialCloseBtn}
+              onPressIn={() => setSerialOpen(false)}
+              hitSlop={12}
+            >
+              <Ionicons name="close" size={20} color={theme.colors.textSoft} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            ref={serialScrollRef}
+            style={styles.serialScroll}
+            contentContainerStyle={styles.serialScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {[...entries].reverse().map((entry, idx) => (
+              <View key={idx} style={[styles.serialRow, idx === 0 && styles.serialRowFirst]}>
+                <Text style={styles.serialTs}>{entry.ts}</Text>
+                <Text style={styles.serialRaw} selectable>
+                  {entry.rawText ?? JSON.stringify({ gpio: entry.gpio, temp: entry.temp, light: entry.light })}
+                </Text>
+              </View>
+            ))}
+            {entries.length === 0 && (
+              <View style={styles.serialEmpty}>
+                <Ionicons name="radio-outline" size={32} color={theme.colors.muted} />
+                <Text style={styles.serialEmptyText}>No packets yet</Text>
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
       {/* Sensor detail modal */}
       <SensorDetailModal
         sensor={selectedSensor}
@@ -477,9 +745,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.colors.background
   },
   content: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 112
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 120
   },
   pageShell: {
     paddingHorizontal: 0,
@@ -492,33 +760,33 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    gap: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    marginBottom: 12,
+    marginBottom: 14,
     ...theme.shadow.card
   },
   quickStatItem: {
     alignItems: 'center',
-    gap: 3
+    gap: 4
   },
   quickStatValue: {
     fontFamily: theme.font.mono,
-    fontSize: 22,
+    fontSize: 24,
     color: theme.colors.text
   },
   quickStatLabel: {
     fontFamily: theme.font.medium,
-    fontSize: 11,
+    fontSize: 13,
     color: theme.colors.textSoft
   },
   quickStatDivider: {
     width: 1,
-    height: 28,
+    height: 32,
     backgroundColor: theme.colors.border
   },
 
@@ -528,22 +796,22 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 14,
     ...theme.shadow.card
   },
   panelTitle: {
     fontFamily: theme.font.bold,
-    fontSize: 16,
+    fontSize: 18,
     color: theme.colors.text,
-    marginBottom: 2
+    marginBottom: 3
   },
   panelCaption: {
     fontFamily: theme.font.medium,
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSoft,
-    marginBottom: 12
+    marginBottom: 14
   },
 
   /* ── I2C compact list ── */
@@ -553,57 +821,57 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   i2cRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 11,
+    gap: 14,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border
   },
   i2cRowText: {
     flex: 1,
-    gap: 1
+    gap: 2
   },
   i2cName: {
     fontFamily: theme.font.semiBold,
-    fontSize: 14,
+    fontSize: 15,
     color: theme.colors.text
   },
   i2cType: {
     fontFamily: theme.font.medium,
-    fontSize: 11,
+    fontSize: 13,
     color: theme.colors.textSoft
   },
   i2cAddr: {
     fontFamily: theme.font.mono,
-    fontSize: 11,
+    fontSize: 13,
     color: theme.colors.textSoft
   },
 
   /* ── Category label ── */
   categoryLabel: {
     fontFamily: theme.font.semiBold,
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSoft,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: 16,
-    marginBottom: 8
+    letterSpacing: 0.8,
+    marginTop: 18,
+    marginBottom: 10
   },
 
   /* ── Sensor grid ── */
   sensorsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10
+    gap: 12
   },
   sensorTile: {
     flex: 1,
-    minWidth: 155,
+    minWidth: 170,
     backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: 12,
-    gap: 8
+    padding: 14,
+    gap: 10
   },
   sensorTilePressed: {
     opacity: 0.65
@@ -611,12 +879,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   sensorTileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10
+    gap: 12
   },
   sensorTileIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -625,22 +893,22 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sensorTileMeta: {
     flex: 1,
-    gap: 1
+    gap: 2
   },
   sensorTileLabel: {
     fontFamily: theme.font.semiBold,
-    fontSize: 13,
+    fontSize: 15,
     color: theme.colors.text,
     textTransform: 'uppercase'
   },
   sensorTileType: {
     fontFamily: theme.font.medium,
-    fontSize: 11,
+    fontSize: 13,
     color: theme.colors.textSoft
   },
   sensorTileActiveDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 999,
     backgroundColor: theme.colors.success
   },
@@ -651,33 +919,201 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sensorTileValue: {
     fontFamily: theme.font.mono,
-    fontSize: 20,
+    fontSize: 22,
     color: theme.colors.text
   },
   digitalStateText: {
     fontFamily: theme.font.semiBold,
-    fontSize: 10,
+    fontSize: 12,
     color: theme.colors.textSoft
   },
   digitalStateTextHigh: {
     color: theme.colors.success
   },
 
+  /* ── ESP32 Pinout Card ── */
+  pinoutCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 14,
+    ...theme.shadow.card
+  },
+  pinoutHeaderRow: {
+    marginBottom: 16,
+  },
+  pinoutTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 3,
+  },
+  pinoutTitle: {
+    fontFamily: theme.font.bold,
+    fontSize: 18,
+    color: theme.colors.text,
+  },
+  pinoutSubtitle: {
+    fontFamily: theme.font.medium,
+    fontSize: 13,
+    color: theme.colors.textSoft,
+  },
+
+  /* Board layout */
+  boardContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 16,
+  },
+  boardSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+
+  /* Pin label rows */
+  pinLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 34,
+  },
+  pinLabelRowLeft: {
+    justifyContent: 'flex-end',
+  },
+  pinLabelRowRight: {
+    justifyContent: 'flex-start',
+  },
+  pinBadge: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    minWidth: 58,
+    alignItems: 'center',
+  },
+  pinBadgeText: {
+    fontFamily: theme.font.mono,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pinAltText: {
+    fontFamily: theme.font.mono,
+    fontSize: 10,
+    color: theme.colors.muted,
+    minWidth: 56,
+  },
+  pinAltSpacer: {
+    minWidth: 56,
+  },
+  pinFnText: {
+    fontFamily: theme.font.semiBold,
+    fontSize: 13,
+    color: theme.colors.text,
+    flex: 1,
+  },
+
+  /* Central chip */
+  boardChip: {
+    width: 64,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    overflow: 'hidden',
+    marginHorizontal: 6,
+  },
+  usbStub: {
+    position: 'absolute',
+    top: -1,
+    left: '50%',
+    marginLeft: -18,
+    width: 36,
+    height: 14,
+    backgroundColor: theme.colors.border,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  usbText: {
+    fontFamily: theme.font.mono,
+    fontSize: 6,
+    color: theme.colors.textSoft,
+    letterSpacing: 0.5,
+  },
+  chipPinCol: {
+    width: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  chipPinDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  chipCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipMainLabel: {
+    fontFamily: theme.font.bold,
+    fontSize: 10,
+    color: theme.colors.textSoft,
+  },
+  chipSubLabel: {
+    fontFamily: theme.font.mono,
+    fontSize: 9,
+    color: theme.colors.muted,
+  },
+
+  /* Legend */
+  pinoutLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendLabel: {
+    fontFamily: theme.font.medium,
+    fontSize: 13,
+    color: theme.colors.textSoft,
+  },
+
   /* ── Empty state ── */
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 8
+    paddingVertical: 48,
+    gap: 10
   },
   emptyText: {
     fontFamily: theme.font.medium,
-    fontSize: 14,
+    fontSize: 16,
     color: theme.colors.textSoft
   },
   emptySubtext: {
     fontFamily: theme.font.medium,
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSoft
   },
 
@@ -685,28 +1121,28 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 32
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 36
   },
   modalHandle: {
     alignSelf: 'center',
-    width: 36,
+    width: 40,
     height: 5,
     borderRadius: 3,
     backgroundColor: theme.colors.border,
-    marginBottom: 20
+    marginBottom: 22
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 24
+    gap: 16,
+    marginBottom: 28
   },
   modalIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -715,18 +1151,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalTitle: {
     fontFamily: theme.font.bold,
-    fontSize: 20,
+    fontSize: 22,
     color: theme.colors.text
   },
   modalSubtitle: {
     fontFamily: theme.font.medium,
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.textSoft,
-    marginTop: 2
+    marginTop: 3
   },
   modalCloseBtn: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
@@ -741,14 +1177,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: 18,
-    marginBottom: 16
+    padding: 20,
+    marginBottom: 18
   },
   modalValueLabel: {
     fontFamily: theme.font.medium,
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSoft,
-    marginBottom: 6
+    marginBottom: 8
   },
   modalValueRow: {
     flexDirection: 'row',
@@ -757,17 +1193,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalValueText: {
     fontFamily: theme.font.mono,
-    fontSize: 32,
+    fontSize: 36,
     color: theme.colors.text
   },
   modalStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: 8
   },
   statusDot: {
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
     borderRadius: 999,
     backgroundColor: theme.colors.border
   },
@@ -776,14 +1212,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalStatusText: {
     fontFamily: theme.font.medium,
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.textSoft
   },
   modalTypeTag: {
     fontFamily: theme.font.mono,
-    fontSize: 11,
+    fontSize: 12,
     color: theme.colors.textSoft,
-    marginTop: 8
+    marginTop: 10
   },
 
   /* ── Modal specs ── */
@@ -792,38 +1228,38 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: 16
+    padding: 18
   },
   modalSpecsSectionTitle: {
     fontFamily: theme.font.semiBold,
-    fontSize: 14,
+    fontSize: 16,
     color: theme.colors.text,
-    marginBottom: 12
+    marginBottom: 14
   },
   modalSpecRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 5
+    gap: 12,
+    paddingVertical: 6
   },
   modalSpecBullet: {
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     borderRadius: 999,
     backgroundColor: theme.colors.textSoft,
-    marginTop: 6
+    marginTop: 7
   },
   modalSpecText: {
     flex: 1,
     fontFamily: theme.font.medium,
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.text,
-    lineHeight: 18
+    lineHeight: 20
   },
 
   /* ── Modal done button ── */
   modalDoneBtn: {
-    paddingVertical: 14,
+    paddingVertical: 16,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -832,7 +1268,135 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalDoneBtnText: {
     fontFamily: theme.font.semiBold,
-    fontSize: 15,
+    fontSize: 16,
     color: theme.colors.text
+  },
+
+  /* ── Serial monitor button ── */
+  serialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 14,
+    ...theme.shadow.card
+  },
+  serialBtnPressed: {
+    opacity: 0.6
+  },
+  serialBtnText: {
+    fontFamily: theme.font.semiBold,
+    fontSize: 14,
+    color: theme.colors.textSoft
+  },
+  serialBtnBadge: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 2
+  },
+  serialBtnBadgeText: {
+    fontFamily: theme.font.mono,
+    fontSize: 12,
+    color: theme.colors.textSoft
+  },
+
+  /* ── Serial monitor modal ── */
+  serialContainer: {
+    flex: 1,
+    backgroundColor: '#0d1117'
+  },
+  serialHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#30363d'
+  },
+  serialHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  serialIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#161b22',
+    borderWidth: 1,
+    borderColor: '#30363d',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  serialTitle: {
+    fontFamily: theme.font.bold,
+    fontSize: 17,
+    color: '#e6edf3'
+  },
+  serialSubtitle: {
+    fontFamily: theme.font.medium,
+    fontSize: 12,
+    color: '#8b949e',
+    marginTop: 1
+  },
+  serialCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#161b22',
+    borderWidth: 1,
+    borderColor: '#30363d',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  serialScroll: {
+    flex: 1
+  },
+  serialScrollContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 2
+  },
+  serialRow: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#21262d'
+  },
+  serialRowFirst: {
+    backgroundColor: '#161b22'
+  },
+  serialTs: {
+    fontFamily: theme.font.mono,
+    fontSize: 11,
+    color: '#8b949e',
+    marginBottom: 4
+  },
+  serialRaw: {
+    fontFamily: theme.font.mono,
+    fontSize: 13,
+    color: '#7ee787',
+    lineHeight: 20
+  },
+  serialEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12
+  },
+  serialEmptyText: {
+    fontFamily: theme.font.medium,
+    fontSize: 15,
+    color: '#8b949e'
   }
 });
