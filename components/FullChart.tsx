@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, LayoutChangeEvent, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Circle, Defs, Line, LinearGradient, Path, Stop, Svg } from 'react-native-svg';
 import { format as formatDate } from 'date-fns';
 
@@ -96,7 +96,11 @@ export function FullChart({
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { width: windowWidth } = useWindowDimensions();
-  const values = useMemo(() => {
+  const [cardWidth, setCardWidth] = useState(0);
+  const handleCardLayout = useCallback((e: LayoutChangeEvent) => {
+    setCardWidth(e.nativeEvent.layout.width);
+  }, []);
+  const rawValues = useMemo(() => {
     if (!data.length) {
       return [0, 0];
     }
@@ -115,13 +119,17 @@ export function FullChart({
       }
     }
 
-    return smoothSeries(sanitized);
+    return sanitized;
   }, [data]);
+
+  // Keep smoothing for curve aesthetics, but keep labels/stats/events on raw
+  // values so readings match incoming telemetry without visual lag.
+  const curveValues = useMemo(() => smoothSeries(rawValues), [rawValues]);
 
   const chartHeight = Math.max(height - 70, 120);
   const safeTickCount = Math.max(4, chartHeight < 155 ? yTickCount - 1 : yTickCount);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
+  const rawMin = Math.min(...rawValues);
+  const rawMax = Math.max(...rawValues);
 
   const baseMin = typeof minValue === 'number' ? minValue : rawMin;
   const baseMax = typeof maxValue === 'number' ? maxValue : rawMax;
@@ -146,7 +154,15 @@ export function FullChart({
     return Math.min(72, Math.max(42, Math.ceil(longest * 5.2) + 8));
   }, [label, max, min, range]);
 
-  const chartWidth = Math.max(windowWidth - 32 - 24, 220);
+  // Use measured card width when available; fall back to window estimate until first layout.
+  const chartWidth = useMemo(() => {
+    if (cardWidth > 24) {
+      // card has paddingHorizontal: 12 on each side (24 total)
+      return Math.max(cardWidth - 24, 220);
+    }
+    // Fallback: outer padding is theme.spacing.lg (18) * 2 = 36, card padding = 24
+    return Math.max(windowWidth - 60, 220);
+  }, [cardWidth, windowWidth]);
   const leftPad = yLabelWidth;
   const rightPad = 10;
   const topPad = 8;
@@ -157,9 +173,9 @@ export function FullChart({
   const animatedOnce = useRef(false);
 
   const { linePath, areaPath, lastPoint, latestValue } = useMemo(() => {
-    const points = values
+    const points = curveValues
       .map((v, i) => {
-        const x = leftPad + (i / Math.max(values.length - 1, 1)) * innerW;
+        const x = leftPad + (i / Math.max(curveValues.length - 1, 1)) * innerW;
         const y = topPad + (1 - (v - min) / range) * innerH;
         return { x, y };
       })
@@ -172,8 +188,13 @@ export function FullChart({
     const line = buildSmoothPath(points);
     const area = `${line} L ${points[points.length - 1].x} ${topPad + innerH} L ${points[0].x} ${topPad + innerH} Z`;
 
-    return { linePath: line, areaPath: area, lastPoint: points[points.length - 1], latestValue: values[values.length - 1] ?? 0 };
-  }, [innerH, innerW, leftPad, min, range, topPad, values]);
+    return {
+      linePath: line,
+      areaPath: area,
+      lastPoint: points[points.length - 1],
+      latestValue: rawValues[rawValues.length - 1] ?? 0
+    };
+  }, [curveValues, innerH, innerW, leftPad, min, range, topPad, rawValues]);
 
   useEffect(() => {
     if (animatedOnce.current) {
@@ -183,12 +204,17 @@ export function FullChart({
     animatedOnce.current = true;
     chartAnim.setValue(0);
 
-    Animated.timing(chartAnim, {
+    const anim = Animated.timing(chartAnim, {
       toValue: 1,
       duration: 360,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true
-    }).start();
+      // useNativeDriver must be false when animating a View that contains SVG.
+      // The native driver composites on the GPU layer before react-native-svg
+      // has had a chance to draw, leaving the chart invisible on Android.
+      useNativeDriver: false
+    });
+    anim.start();
+    return () => anim.stop();
   }, [chartAnim]);
 
   const yTicks = Array.from({ length: safeTickCount }, (_, index) => {
@@ -218,9 +244,9 @@ export function FullChart({
       return Number.NaN;
     };
 
-    const timeline = Array.isArray(xValues) && xValues.length === values.length
+    const timeline = Array.isArray(xValues) && xValues.length === rawValues.length
       ? xValues
-      : Array.from({ length: values.length }, (_, i) => i);
+      : Array.from({ length: rawValues.length }, (_, i) => i);
 
     const realTimes = timeline
       .map((v) => normalizeEpoch(v))
@@ -259,28 +285,28 @@ export function FullChart({
     const mid = Math.floor(last / 2);
     const idxs = [...new Set([0, mid, last])].filter((idx) => idx >= 0);
     return idxs.map((idx) => {
-      const x = leftPad + (idx / Math.max(values.length - 1, 1)) * innerW;
+      const x = leftPad + (idx / Math.max(rawValues.length - 1, 1)) * innerW;
       return { idx, x, label: formatX(timeline[idx] ?? idx) };
     });
-  }, [innerW, leftPad, values.length, xValues]);
+  }, [innerW, leftPad, rawValues.length, xValues]);
 
   const chartStats = useMemo(() => {
-    if (!values.length) {
+    if (!rawValues.length) {
       return null;
     }
 
     return {
-      minV: Math.min(...values),
-      maxV: Math.max(...values)
+      minV: Math.min(...rawValues),
+      maxV: Math.max(...rawValues)
     };
-  }, [values]);
+  }, [rawValues]);
 
   const eventMarker = useMemo(() => {
-    if (!showEventMarker || !lastPoint || values.length < 2) {
+    if (!showEventMarker || !lastPoint || rawValues.length < 2) {
       return null;
     }
 
-    const prev = values[values.length - 2] ?? latestValue;
+    const prev = rawValues[rawValues.length - 2] ?? latestValue;
     const delta = latestValue - prev;
     const threshold = typeof eventDeltaThreshold === 'number' ? eventDeltaThreshold : Math.max(range * 0.18, 1);
 
@@ -292,10 +318,10 @@ export function FullChart({
       delta,
       label: delta < 0 ? 'Scadere brusca' : 'Crestere brusca'
     };
-  }, [eventDeltaThreshold, lastPoint, latestValue, range, showEventMarker, values]);
+  }, [eventDeltaThreshold, lastPoint, latestValue, range, showEventMarker, rawValues]);
 
   return (
-    <View style={[styles.card, { minHeight: height }]}> 
+    <View style={[styles.card, { minHeight: height }]} onLayout={handleCardLayout}> 
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       <Animated.View

@@ -82,6 +82,20 @@ export interface IOLogEntry {
   rawText?: string;
 }
 
+export interface WifiScanNetwork {
+  ssid: string;
+  rssi: number;
+  auth?: string;
+}
+
+export interface CommandAck {
+  id: string;
+  action?: string;
+  status: string;
+  message?: string;
+  ts?: string;
+}
+
 const HISTORY_CAP = 2000;
 const LOG_CAP = 1200;
 
@@ -123,6 +137,8 @@ interface StoreState {
   selectedRange: TimeRangeKey;
   themeMode: ThemeMode;
   ioLog: IOLogEntry[];
+  wifiScanNetworks: WifiScanNetwork[] | null;
+  lastCommandAck: CommandAck | null;
   pushReading: (data: ESP32Data, ts: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setMqttStatus: (status: ConnectionStatus) => void;
@@ -132,6 +148,8 @@ interface StoreState {
   setThemeMode: (mode: ThemeMode) => void;
   toggleThemeMode: () => void;
   addLog: (entry: IOLogEntry) => void;
+  setWifiScanNetworks: (networks: WifiScanNetwork[] | null) => void;
+  setLastCommandAck: (ack: CommandAck | null) => void;
   setImuFrame: (frame: Partial<ESP32Data>) => void;
   hydrateHistory: (readings: ESP32Data[], logs: IOLogEntry[]) => void;
   reset: () => void;
@@ -147,6 +165,8 @@ type StoreData = Omit<
   | 'setThemeMode'
   | 'toggleThemeMode'
   | 'addLog'
+  | 'setWifiScanNetworks'
+  | 'setLastCommandAck'
   | 'setImuFrame'
   | 'hydrateHistory'
   | 'reset'
@@ -198,15 +218,31 @@ const baseData = (): StoreData => ({
   mqttStatus: 'offline',
   selectedRange: '60s',
   themeMode: 'dark',
-  ioLog: []
+  ioLog: [],
+  wifiScanNetworks: null,
+  lastCommandAck: null,
+  setMqttStatus: function (status: ConnectionStatus): void {
+    throw new Error('Function not implemented.');
+  }
 });
 
 const listeners = new Set<() => void>();
 
 let storeData: StoreData = baseData();
 
+// Batch all synchronous store mutations within the same JS task into a single
+// listener notification. This prevents 3+ separate re-render waves when an
+// MQTT message triggers setConnectionStatus + setMqttStatus + pushReading in
+// sequence, and stops IMU WebSocket frames from causing multiple render cycles
+// per tick.
+let emitQueued = false;
 const emit = () => {
-  listeners.forEach((listener) => listener());
+  if (emitQueued) return;
+  emitQueued = true;
+  Promise.resolve().then(() => {
+    emitQueued = false;
+    listeners.forEach((listener) => listener());
+  });
 };
 
 const setData = (patch: Partial<StoreData>) => {
@@ -274,6 +310,12 @@ const actions = {
   },
   addLog: (entry: IOLogEntry) => {
     setData({ ioLog: capLog(storeData.ioLog, entry) });
+  },
+  setWifiScanNetworks: (networks: WifiScanNetwork[] | null) => {
+    setData({ wifiScanNetworks: networks });
+  },
+  setLastCommandAck: (ack: CommandAck | null) => {
+    setData({ lastCommandAck: ack });
   },
   setImuFrame: (frame: Partial<ESP32Data>) => {
     const current = storeData.data ?? emptyReading();

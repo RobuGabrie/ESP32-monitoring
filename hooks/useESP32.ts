@@ -22,7 +22,7 @@ import {
   SUPABASE_URL,
   USE_MOCK
 } from '@/constants/config';
-import { ESP32Data, IOLogEntry, ModuleName, TimeRangeKey, getStoreState, useStore } from '@/hooks/useStore';
+import { ESP32Data, IOLogEntry, ModuleName, TimeRangeKey, WifiScanNetwork, getStoreState, useStore } from '@/hooks/useStore';
 
 if (!globalThis.Buffer) {
   (globalThis as typeof globalThis & { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -454,6 +454,64 @@ const normalizeStatePayload = (payload: unknown) => {
   return Object.keys(next).length ? next : null;
 };
 
+const normalizeWifiScanPayload = (payload: unknown): WifiScanNetwork[] | null => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const rec = payload as Record<string, unknown>;
+  if (rec.action !== 'wifi.scan.result' || !Array.isArray(rec.networks)) {
+    return null;
+  }
+
+  const networks = rec.networks
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const ssid = typeof row.ssid === 'string' ? row.ssid.trim() : '';
+      if (!ssid) {
+        return null;
+      }
+
+      return {
+        ssid,
+        rssi: Math.round(toNumber(row.rssi, -100)),
+        auth: typeof row.auth === 'string' ? row.auth : undefined
+      } as WifiScanNetwork;
+    })
+    .filter((n): n is WifiScanNetwork => Boolean(n));
+
+  return networks;
+};
+
+const normalizeCommandAckPayload = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const rec = payload as Record<string, unknown>;
+  const last = rec.last_command;
+  if (!last || typeof last !== 'object') {
+    return null;
+  }
+
+  const row = last as Record<string, unknown>;
+  if (typeof row.id !== 'string' || !row.id.trim()) {
+    return null;
+  }
+
+  const status = typeof row.status === 'string' && row.status.trim() ? row.status.trim() : 'ok';
+  return {
+    id: row.id.trim(),
+    action: typeof row.action === 'string' ? row.action : undefined,
+    status,
+    message: typeof row.message === 'string' ? row.message : undefined,
+    ts: typeof rec.ts === 'string' ? rec.ts : undefined
+  };
+};
+
 const mockData = (t: number): ESP32Data => {
   const lightRaw = Math.round(clamp(130 + 90 * Math.sin(t / 20) + random(10), 0, 255));
   const lightPercent = toPercentFrom255(lightRaw);
@@ -635,7 +693,7 @@ const applyImuFrameToStore = (parsed: unknown, nowMs: number) => {
   sharedLastMessageAt = nowMs;
   getStoreState().setConnectionStatus('online');
 
-  if (nowMs - sharedLastImuStorePushAt >= 40) {
+  if (nowMs - sharedLastImuStorePushAt >= 200) {
     sharedLastImuStorePushAt = nowMs;
     getStoreState().setImuFrame({
       ...imu,
@@ -951,6 +1009,16 @@ const connectSharedMQTT = () => {
       const parsed = JSON.parse(payload.toString());
 
       if (topic === MQTT_STATE_TOPIC) {
+        const ack = normalizeCommandAckPayload(parsed);
+        if (ack) {
+          getStoreState().setLastCommandAck(ack);
+        }
+
+        const networks = normalizeWifiScanPayload(parsed);
+        if (networks) {
+          getStoreState().setWifiScanNetworks(networks);
+        }
+
         const nextState = normalizeStatePayload(parsed);
         if (nextState) {
           getStoreState().setModuleStates(nextState);
@@ -1129,6 +1197,8 @@ export const useESP32 = () => {
   const selectedRange = useStore((s) => s.selectedRange);
   const setTimeRange = useStore((s) => s.setTimeRange);
   const ioLog = useStore((s) => s.ioLog);
+  const wifiScanNetworks = useStore((s) => s.wifiScanNetworks);
+  const lastCommandAck = useStore((s) => s.lastCommandAck);
   const totalCurrentMah = useStore((s) => s.totalCurrentMah);
   const peakCurrent = useStore((s) => s.peakCurrent);
   const moduleStates = useStore((s) => s.moduleStates);
@@ -1218,6 +1288,8 @@ export const useESP32 = () => {
     totalCurrentMah,
     peakCurrent,
     moduleStates,
+    wifiScanNetworks,
+    lastCommandAck,
     publishCommand,
     sendModuleCommand,
     sendCpuStressCommand

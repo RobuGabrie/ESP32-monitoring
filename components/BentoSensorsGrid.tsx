@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useESP32 } from '@/hooks/useESP32';
 import { ESP32Data } from '@/hooks/useStore';
 
 interface Props {
@@ -39,27 +40,6 @@ const disconnectedStyles = StyleSheet.create({
   }
 });
 
-// ─── Accent stripe ───────────────────────────────────────────────────────────
-
-function AccentStripe({ color }: { color: string }) {
-  const id = `stripe_${color.replace('#', '')}`;
-  return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, overflow: 'hidden', borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
-      <Svg width="100%" height="2" preserveAspectRatio="none">
-        <Defs>
-          <LinearGradient id={id} x1="0%" y1="0%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor={color} stopOpacity={0} />
-            <Stop offset="30%" stopColor={color} stopOpacity={0.6} />
-            <Stop offset="70%" stopColor={color} stopOpacity={0.6} />
-            <Stop offset="100%" stopColor={color} stopOpacity={0} />
-          </LinearGradient>
-        </Defs>
-        <Rect x={0} y={0} width="100%" height="2" fill={`url(#${id})`} />
-      </Svg>
-    </View>
-  );
-}
-
 // ─── Base sensor card ────────────────────────────────────────────────────────
 
 interface SensorCardProps {
@@ -77,7 +57,7 @@ function SensorCard({ label, icon, iconColor, isDisconnected, theme, children, s
 
   return (
     <View style={[s.card, style]}>
-      {!isDisconnected && <AccentStripe color={iconColor} />}
+      {!isDisconnected }
       <View style={s.header}>
         <View style={[s.iconWrap, { backgroundColor: isDisconnected ? 'transparent' : `${iconColor}15` }]}>
           <Ionicons name={icon} size={14} color={isDisconnected ? theme.colors.muted : iconColor} />
@@ -325,6 +305,7 @@ function PowerMeter({ watts, maxWatts, theme }: { watts: number; maxWatts: numbe
 export function BentoSensorsGrid({ data, isConnected }: Props) {
   const { theme } = useAppTheme();
   const { width } = useWindowDimensions();
+  const { moduleStates, sendCpuStressCommand } = useESP32();
   const isDesktop = width >= 768;
 
   const gap = 10;
@@ -439,6 +420,41 @@ export function BentoSensorsGrid({ data, isConnected }: Props) {
             theme={theme}
           />
           <CpuBar percent={noCpu ? 0 : cpu} theme={theme} />
+          <Pressable
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.spacing.xs,
+              alignSelf: 'flex-start',
+              marginTop: theme.spacing.sm,
+              minHeight: theme.touch.minTarget,
+              paddingHorizontal: theme.spacing.sm,
+              paddingVertical: theme.spacing.xs,
+              borderRadius: theme.radius.sm,
+              borderWidth: 1,
+              borderColor: moduleStates.cpuStress ? 'rgba(56,189,248,0.4)' : theme.colors.border,
+              backgroundColor: moduleStates.cpuStress ? 'rgba(56,189,248,0.1)' : theme.colors.surfaceMuted
+            }}
+            onPress={() => sendCpuStressCommand(!moduleStates.cpuStress)}
+          >
+            <Ionicons
+              name={moduleStates.cpuStress ? 'flash' : 'flash-outline'}
+              size={14}
+              color={moduleStates.cpuStress ? theme.chart.palette.cpu : theme.colors.muted}
+            />
+            <Text
+              style={{
+                ...theme.type.caption,
+                fontSize: 11,
+                lineHeight: 14,
+                color: moduleStates.cpuStress ? theme.chart.palette.cpu : theme.colors.muted,
+                fontFamily: theme.font.semiBold,
+                letterSpacing: 0.4
+              }}
+            >
+              {moduleStates.cpuStress ? 'Stres CPU activ' : 'Porneste stres CPU'}
+            </Text>
+          </Pressable>
         </SensorCard>
         
       </View>

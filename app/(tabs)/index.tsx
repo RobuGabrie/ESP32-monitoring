@@ -12,7 +12,7 @@ import { ScreenShell } from '@/components/ScreenShell';
 import { AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
-import { ModuleName, TimeRangeKey } from '@/hooks/useStore';
+import { ModuleName, TimeRangeKey, getStoreState } from '@/hooks/useStore';
 
 type DashboardCard = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -81,7 +81,7 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 export default function OverviewScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { data, history, status, mqttStatus, ioLog, moduleStates, totalCurrentMah, peakCurrent, selectedRange, setTimeRange } = useESP32();
+  const { data, history, status, mqttStatus, moduleStates, totalCurrentMah, peakCurrent, selectedRange, setTimeRange } = useESP32();
   const { width } = useWindowDimensions();
   const [selectedCmd, setSelectedCmd] = useState<ModuleName | null>(null);
   const livePulse = useRef(new Animated.Value(1)).current;
@@ -91,6 +91,7 @@ export default function OverviewScreen() {
 
   const onExportPress = useCallback(async () => {
     try {
+      const ioLog = getStoreState().ioLog;
       const snapshot = {
         exportedAt: new Date().toISOString(),
         status,
@@ -114,7 +115,7 @@ export default function OverviewScreen() {
     } catch {
       Alert.alert('Export eșuat', 'Nu s-a putut exporta snapshot-ul de telemetrie. Încearcă din nou.');
     }
-  }, [data, history, ioLog, moduleStates, status]);
+  }, [data, history, moduleStates, status]);
 
   const rangeSubtitleMap: Record<TimeRangeKey, string> = {
     '60s': 'ultimele 60 secunde',
@@ -358,7 +359,7 @@ export default function OverviewScreen() {
                 label={temperatureDetailCard.detailLabel}
                 height={260}
                 minValue={0}
-                maxValue={50}
+                maxValue={30}
                 yTickCount={6}
                 showLegend
                 showEventMarker

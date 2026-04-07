@@ -1,423 +1,926 @@
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Dimensions,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { BatteryBar } from '@/components/BatteryBar';
-import { FullChart } from '@/components/FullChart';
-import { NetworkTable } from '@/components/NetworkTable';
-import { ScreenShell } from '@/components/ScreenShell';
-import { SectionHeader } from '@/components/SectionHeader';
-import { SignalBars } from '@/components/SignalBars';
-import { StatusSummaryCard } from '@/components/StatusSummaryCard';
-import { TabHero } from '@/components/TabHero';
-import { TimeRangeSelector } from '@/components/TimeRangeSelector';
-import { BATTERY_CAPACITY } from '@/constants/config';
 import { AppTheme } from '@/constants/theme';
+import {
+  MQTT_BROKER,
+  MQTT_PORT,
+  MQTT_TOPIC,
+  MQTT_CMD_TOPIC,
+  MQTT_STATE_TOPIC
+} from '@/constants/config';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
+import { showToast } from '@/lib/showToast';
 
-export default function SettingsScreen() {
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
-  const { data, history, totalCurrentMah, peakCurrent, status, selectedRange, setTimeRange } = useESP32();
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-  const avgCurrent = history.currentHistory.length
-    ? history.currentHistory.reduce((acc, n) => acc + n, 0) / history.currentHistory.length
-    : data?.current ?? 0;
+type BadgeTone = 'green' | 'orange' | 'blue' | 'red' | 'gray';
+type SheetId =
+  | 'wifi-current'
+  | 'wifi-creds'
+  | 'mqtt'
+  | 'firmware'
+  | null;
 
-  const batteryPresent = (data?.volt ?? 0) > 2.5;
-  const usedMah = batteryPresent && data?.totalMah && data.totalMah > 0 ? data.totalMah : batteryPresent ? totalCurrentMah : 0;
-  const remainingMah = batteryPresent ? Math.max(BATTERY_CAPACITY - usedMah, 0) : 0;
-  const fallbackPercent = (remainingMah / BATTERY_CAPACITY) * 100;
-  const percent = batteryPresent
-    ? data?.batteryPercent && data.batteryPercent > 0
-      ? data.batteryPercent
-      : fallbackPercent
-    : 0;
-  const fallbackRemainingHours = remainingMah / Math.max(avgCurrent, 0.1);
-  const hasEstimate = batteryPresent && (((data?.batteryLifeMin ?? -1) > 0) || (percent > 0 && avgCurrent > 1));
-  const remainingHours = hasEstimate
-    ? (data?.batteryLifeMin && data.batteryLifeMin > 0 ? data.batteryLifeMin / 60 : fallbackRemainingHours)
-    : -1;
-  const quickTiles = [
-    {
-      key: 'rssi',
-      label: 'RSSI',
-      value: `${Math.round(data?.rssi ?? -99)} dBm`,
-      icon: 'wifi-outline' as const,
-      tone: 'rgba(232,84,42,0.12)'
-    },
-    {
-      key: 'volt',
-      label: 'Tensiune',
-      value: `${(data?.volt ?? 0).toFixed(2)} V`,
-      icon: 'pulse-outline' as const,
-      tone: 'rgba(61,220,132,0.12)'
-    },
-    {
-      key: 'current',
-      label: 'Curent',
-      value: `${Math.abs(data?.current ?? 0).toFixed(1)} mA`,
-      icon: 'flash-outline' as const,
-      tone: 'rgba(245,158,11,0.12)'
-    },
-    {
-      key: 'battery',
-      label: 'Baterie',
-      value: `${Math.round(percent)}%`,
-      icon: 'battery-half-outline' as const,
-      tone: 'rgba(61,220,132,0.12)'
-    }
-  ];
-  const energyTiles = [
-    {
-      key: 'power',
-      label: 'Putere instant',
-      value: `${(data?.powerMw ?? 0).toFixed(1)} mW`,
-      icon: 'flash-outline' as const,
-      tone: 'rgba(245,158,11,0.12)'
-    },
-    {
-      key: 'avg',
-      label: 'Curent mediu',
-      value: `${avgCurrent.toFixed(1)} mA`,
-      icon: 'analytics-outline' as const,
-      tone: 'rgba(56,189,248,0.12)'
-    },
-    {
-      key: 'peak',
-      label: 'Curent maxim',
-      value: `${peakCurrent.toFixed(1)} mA`,
-      icon: 'trending-up-outline' as const,
-      tone: 'rgba(232,84,42,0.12)'
-    }
-  ];
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  const networkRows: { keyLabel: string; value: string; statusTone?: 'online' | 'offline' }[] = [
-    { keyLabel: 'SSID', value: data?.ssid ?? '--' },
-    { keyLabel: 'IP', value: data?.ip ?? '--' },
-    { keyLabel: 'MAC', value: data?.mac ?? '--' },
-    { keyLabel: 'Canal', value: String(data?.channel ?? '--') },
-    { keyLabel: 'RSSI', value: `${Math.round(data?.rssi ?? -99)} dBm` },
-    { keyLabel: 'Status', value: status === 'online' ? 'Conectat' : 'Offline', statusTone: status === 'online' ? 'online' : 'offline' }
-  ];
-  const darkModeEnabled = true;
-
-  return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <ScreenShell
-          contentStyle={styles.pageShell}
-          screenTitle="Settings"
-          screenSubtitle="Conectivitate, energie si configurare dashboard"
-          selectedRange={selectedRange}
-          onRangeChange={setTimeRange}
-        >
-          <TabHero
-            title="Settings"
-            subtitle="Centru unificat pentru conectivitate, energie si starea sistemului."
-            statusLabel={status === 'online' ? 'Conectat' : 'Offline'}
-            statusTone={status === 'online' ? 'online' : 'offline'}
-            meta={[
-              { label: 'SSID', value: data?.ssid ?? '--' },
-              { label: 'IP', value: data?.ip ?? '--' }
-            ]}
-          />
-
-          <View style={styles.panel}>
-            <SectionHeader title="Status rapid" count={quickTiles.length} />
-            <View style={styles.quickGrid}>
-              {quickTiles.map((tile) => (
-                <StatusSummaryCard
-                  key={tile.key}
-                  label={tile.label}
-                  value={tile.value}
-                  icon={tile.icon}
-                  accent={tile.tone}
-                  iconColor={theme.colors.text}
-                  style={styles.quickTile}
-                />
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.panel}>
-            <SectionHeader title="Conectivitate" count={2} />
-            <View style={styles.connectivityCard}>
-              <View style={styles.connectivityHead}>
-                <View style={styles.connectivityTitleWrap}>
-                  <View style={styles.connectivityIconWrap}>
-                    <Ionicons name="wifi-outline" size={15} color={theme.colors.primary} />
-                  </View>
-                  <Text style={styles.connectivityTitle}>Retea Wi-Fi</Text>
-                </View>
-                <View style={[styles.connectivityStatusPill, status === 'online' ? styles.connectivityStatusOnline : styles.connectivityStatusOffline]}>
-                  <Text style={[styles.connectivityStatusText, status === 'online' ? styles.connectivityStatusTextOnline : styles.connectivityStatusTextOffline]}>
-                    {status === 'online' ? 'Conectat' : 'Offline'}
-                  </Text>
-                </View>
-              </View>
-
-              <SignalBars rssi={data?.rssi ?? -99} embedded />
-              <View style={styles.connectivityDivider} />
-              <NetworkTable rows={networkRows} embedded />
-            </View>
-          </View>
-
-          <View style={styles.panel}>
-            <SectionHeader title="Energie" count={1} />
-            <View style={styles.energyCard}>
-              <View style={styles.energyKpiGrid}>
-                {energyTiles.map((tile) => (
-                  <StatusSummaryCard
-                    key={tile.key}
-                    label={tile.label}
-                    value={tile.value}
-                    icon={tile.icon}
-                    accent={tile.tone}
-                    iconColor={theme.colors.text}
-                    style={styles.energyKpi}
-                  />
-                ))}
-              </View>
-              <BatteryBar percent={percent} />
-              <View style={styles.energyDivider} />
-              <View style={styles.energyRows}>
-                <Row label="Autonomie estimata" value={remainingHours > 0 ? `${remainingHours.toFixed(1)} h` : '--'} />
-                <Row label="Capacitate folosita" value={`${usedMah.toFixed(2)} mAh`} />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.controlsPanel}>
-            <TimeRangeSelector value={selectedRange} onChange={setTimeRange} />
-          </View>
-
-          <View style={styles.panel}>
-            <SectionHeader title="Trenduri" count={3} />
-            <View style={styles.trendsWrap}>
-              <FullChart
-                title="Tensiune alimentare (V)"
-                data={history.voltHistory}
-                xValues={history.timeline}
-                color={theme.chart.palette.voltage}
-                label={(v) => `${v.toFixed(2)} V`}
-                height={190}
-                showLegend
-              />
-              <FullChart
-                title="Curent (mA)"
-                data={history.currentHistory}
-                xValues={history.timeline}
-                color={theme.chart.palette.current}
-                label={(v) => `${Math.abs(v).toFixed(1)} mA`}
-                height={190}
-                showLegend
-              />
-              <FullChart
-                title="Trend RSSI (dBm)"
-                data={history.rssiHistory}
-                xValues={history.timeline}
-                color={theme.chart.palette.rssi}
-                label={(v) => `${Math.round(v)} dBm`}
-                height={190}
-                showLegend
-              />
-            </View>
-          </View>
-        </ScreenShell>
-      </ScrollView>
-    </SafeAreaView>
-  );
+function formatUptime(seconds: number): string {
+  const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+  const s = String(seconds % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+function wifiQuality(rssi: number): number {
+  if (rssi >= -50) return 4;
+  if (rssi >= -60) return 3;
+  if (rssi >= -70) return 2;
+  return 1;
+}
 
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function SectionLabel({ title, danger }: { title: string; danger?: boolean }) {
+  const { theme } = useAppTheme();
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowKey}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 18, paddingHorizontal: 4 }}>
+      <Text
+        style={{
+          fontSize: 13,
+          fontFamily: theme.font.semiBold,
+          color: danger ? theme.colors.danger : theme.colors.muted,
+          letterSpacing: 1.5,
+          textTransform: 'uppercase'
+        }}
+      >
+        {title}
+      </Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: danger ? 'rgba(232,64,64,0.2)' : theme.colors.border }} />
     </View>
   );
 }
 
-const createStyles = (theme: AppTheme) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.background },
-  content: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 104 },
-  pageShell: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 0
-  },
-  panel: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    ...theme.shadow.card
-  },
-  controlsPanel: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 12,
-    ...theme.shadow.card
-  },
-  preferenceRow: {
-    marginTop: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10
-  },
-  preferenceTitle: {
-    color: theme.colors.text,
-    fontFamily: theme.font.semiBold,
-    fontSize: 14
-  },
-  preferenceHint: {
-    marginTop: 2,
-    color: theme.colors.textSoft,
-    fontFamily: theme.font.regular,
-    fontSize: 12
-  },
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4
-  },
-  quickTile: {
-    flexBasis: '48%',
-    minWidth: 150
-  },
-  connectivityCard: {
-    marginTop: 2,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 12
-  },
-  connectivityHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8
-  },
-  connectivityTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  connectivityIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 999,
-    backgroundColor: 'rgba(232,84,42,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  connectivityTitle: {
-    color: theme.colors.text,
-    fontFamily: theme.font.bold,
-    fontSize: 14
-  },
-  connectivityStatusPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 4
-  },
-  connectivityStatusOnline: {
-    backgroundColor: 'rgba(61,220,132,0.12)',
-    borderColor: 'rgba(61,220,132,0.3)'
-  },
-  connectivityStatusOffline: {
-    backgroundColor: 'rgba(232,64,64,0.12)',
-    borderColor: 'rgba(232,64,64,0.3)'
-  },
-  connectivityStatusText: {
-    fontFamily: theme.font.semiBold,
-    fontSize: 11
-  },
-  connectivityStatusTextOnline: {
-    color: '#3ddc84'
-  },
-  connectivityStatusTextOffline: {
-    color: '#e84040'
-  },
-  connectivityDivider: {
-    marginVertical: 8,
-    height: 1,
-    backgroundColor: theme.colors.border
-  },
-  energyCard: {
-    marginTop: 2,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 12
-  },
-  energyRows: {
-    marginBottom: 6
-  },
-  energyKpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8
-  },
-  energyKpi: {
-    flexBasis: '31%',
-    minWidth: 160,
-    flexGrow: 1
-  },
-  energyDivider: {
-    marginVertical: 8,
-    height: 1,
-    backgroundColor: theme.colors.border
-  },
-  trendsWrap: {
-    gap: 2,
-    marginTop: 2
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 7
-  },
-  rowKey: {
-    color: theme.colors.muted,
-    fontFamily: theme.font.medium,
-    fontSize: 13
-  },
-  rowValue: {
-    color: theme.colors.text,
-    fontFamily: theme.font.semiBold,
-    fontSize: 13,
-    textAlign: 'right',
-    minWidth: 110,
-    maxWidth: '58%',
-    flexShrink: 1
-  }
-});
+function Badge({ label, tone }: { label: string; tone: BadgeTone }) {
+  const { theme } = useAppTheme();
+  const colors: Record<BadgeTone, { bg: string; border: string; text: string }> = {
+    green:  { bg: 'rgba(61,220,132,0.12)',  border: 'rgba(61,220,132,0.25)',  text: theme.colors.success },
+    orange: { bg: 'rgba(232,84,42,0.12)',   border: 'rgba(232,84,42,0.25)',   text: theme.colors.primary },
+    blue:   { bg: 'rgba(56,189,248,0.12)',  border: 'rgba(56,189,248,0.25)',  text: theme.colors.info },
+    red:    { bg: 'rgba(232,64,64,0.12)',   border: 'rgba(232,64,64,0.25)',   text: theme.colors.danger },
+    gray:   { bg: 'rgba(255,255,255,0.06)', border: theme.colors.border,      text: theme.colors.muted }
+  };
+  const c = colors[tone];
+  return (
+    <View style={{ backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
+      <Text style={{ fontSize: 12, fontFamily: theme.font.semiBold, color: c.text, letterSpacing: 0.3 }}>{label}</Text>
+    </View>
+  );
+}
+
+function IconBox({ color, children }: { color: string; children: React.ReactNode }) {
+  return (
+    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: color, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {children}
+    </View>
+  );
+}
+
+function WifiSignalBars({ rssi }: { rssi: number }) {
+  const active = wifiQuality(rssi);
+  const heights = [6, 10, 14, 18];
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2 }}>
+      {heights.map((h, i) => (
+        <View
+          key={i}
+          style={{
+            width: 4,
+            height: h,
+            borderRadius: 1,
+            backgroundColor: i < active ? '#3ddc84' : 'rgba(255,255,255,0.12)'
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function Chevron({ color }: { color?: string }) {
+  const { theme } = useAppTheme();
+  return <Text style={{ fontSize: 18, color: color ?? theme.colors.muted, marginLeft: 2 }}>›</Text>;
+}
+
+interface SettingRowProps {
+  icon: React.ReactNode;
+  label: string;
+  desc?: string;
+  value?: string;
+  right?: React.ReactNode;
+  onPress?: () => void;
+  isLast?: boolean;
+}
+
+function SettingRow({ icon, label, desc, value, right, onPress, isLast }: SettingRowProps) {
+  const { theme } = useAppTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: 'rgba(255,255,255,0.04)' }}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 14,
+          paddingHorizontal: 18,
+          paddingVertical: 16,
+          minHeight: 68,
+          borderBottomWidth: isLast ? 0 : 1,
+          borderBottomColor: theme.colors.border,
+          backgroundColor: pressed ? 'rgba(255,255,255,0.02)' : 'transparent'
+        }
+      ]}
+    >
+      {icon}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 15, fontFamily: theme.font.semiBold, color: theme.colors.text }} numberOfLines={1}>
+          {label}
+        </Text>
+        {desc && (
+          <Text style={{ fontSize: 13, color: theme.colors.muted, marginTop: 2 }} numberOfLines={1}>
+            {desc}
+          </Text>
+        )}
+        {value && !desc && (
+          <Text style={{ fontSize: 13, fontFamily: theme.font.mono, color: theme.colors.muted, marginTop: 2 }} numberOfLines={1}>
+            {value}
+          </Text>
+        )}
+      </View>
+      {right && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>{right}</View>}
+    </Pressable>
+  );
+}
+
+function SettingGroup({ children }: { children: React.ReactNode }) {
+  const { theme } = useAppTheme();
+  const windowWidth = Dimensions.get('window').width;
+  // On wider screens (tablet/laptop), show 2 columns
+  const isWideScreen = windowWidth > 768;
+  
+  return (
+    <View
+      style={{
+        backgroundColor: theme.colors.card,
+        borderRadius: theme.radius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        overflow: 'hidden',
+        ...theme.shadow.card
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function DangerGroup({ children }: { children: React.ReactNode }) {
+  const { theme } = useAppTheme();
+  return (
+    <View
+      style={{
+        backgroundColor: theme.colors.card,
+        borderRadius: theme.radius.lg,
+        borderWidth: 1,
+        borderColor: 'rgba(232,64,64,0.2)',
+        overflow: 'hidden',
+        ...theme.shadow.card
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+// ─── Bottom Sheet ─────────────────────────────────────────────────────────────
+
+function BottomSheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
+  const { theme } = useAppTheme();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' }} onPress={onClose} />
+      <View
+        style={{
+          backgroundColor: theme.colors.card,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          borderTopWidth: 1,
+          borderColor: theme.colors.border,
+          maxHeight: '85%',
+          paddingHorizontal: 20,
+          paddingBottom: 48
+        }}
+      >
+        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: 'center', marginTop: 14, marginBottom: 20 }} />
+        <ScrollView showsVerticalScrollIndicator={false}>{children}</ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+function SheetTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { theme } = useAppTheme();
+  return (
+    <>
+      <Text style={{ fontSize: 22, fontFamily: theme.font.bold, color: theme.colors.text, marginBottom: 6 }}>{title}</Text>
+      {subtitle && <Text style={{ fontSize: 14, color: theme.colors.muted, marginBottom: 22 }}>{subtitle}</Text>}
+    </>
+  );
+}
+
+function SheetField({ label, children }: { label: string; children: React.ReactNode }) {
+  const { theme } = useAppTheme();
+  return (
+    <View style={{ marginBottom: 18 }}>
+      <Text style={{ fontSize: 13, color: theme.colors.muted, fontFamily: theme.font.semiBold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 9 }}>
+        {label}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+function SheetInput({ placeholder, value, onChangeText, secureTextEntry }: {
+  placeholder?: string;
+  value?: string;
+  onChangeText?: (v: string) => void;
+  secureTextEntry?: boolean;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <TextInput
+      style={{
+        backgroundColor: theme.colors.surfaceMuted,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 15,
+        fontSize: 16,
+        fontFamily: theme.font.mono,
+        color: theme.colors.text
+      }}
+      placeholder={placeholder}
+      placeholderTextColor={theme.colors.muted}
+      value={value}
+      onChangeText={onChangeText}
+      secureTextEntry={secureTextEntry}
+    />
+  );
+}
+
+function SheetButton({ label, variant = 'primary', onPress }: { label: string; variant?: 'primary' | 'secondary' | 'danger'; onPress?: () => void }) {
+  const { theme } = useAppTheme();
+  const bg = variant === 'primary' ? theme.colors.primary : variant === 'danger' ? 'rgba(232,64,64,0.12)' : theme.colors.surfaceMuted;
+  const textColor = variant === 'primary' ? '#fff' : variant === 'danger' ? theme.colors.danger : theme.colors.text;
+  const borderColor = variant === 'secondary' ? theme.colors.border : variant === 'danger' ? 'rgba(232,64,64,0.25)' : 'transparent';
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: '100%',
+        paddingVertical: 16,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor,
+        backgroundColor: pressed && variant === 'primary' ? theme.colors.primaryLight : bg,
+        alignItems: 'center',
+        marginTop: variant === 'primary' ? 6 : 12,
+        opacity: pressed ? 0.9 : 1
+      })}
+    >
+      <Text style={{ fontSize: 16, fontFamily: theme.font.bold, color: textColor }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  const { theme } = useAppTheme();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+      <Text style={{ fontSize: 14, color: theme.colors.muted, fontFamily: theme.font.medium }}>{label}</Text>
+      <Text style={{ fontSize: 14, fontFamily: theme.font.mono, color: theme.colors.text }}>{value}</Text>
+    </View>
+  );
+}
+
+// ─── Sheet Contents ───────────────────────────────────────────────────────────
+
+function WifiCurrentSheet({ data, status, onClose }: { data: any; status: string; onClose: () => void }) {
+  const { theme } = useAppTheme();
+  return (
+    <>
+      <SheetTitle title="Status WiFi" subtitle="Conexiunea curentă a ESP32" />
+      <View style={{ backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, padding: 18, marginBottom: 20 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(56,189,248,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="wifi-outline" size={24} color={theme.colors.info} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 17, fontFamily: theme.font.bold, color: theme.colors.text }}>{data?.ssid ?? 'SUDO_AP'}</Text>
+            <Text style={{ fontSize: 13, fontFamily: theme.font.mono, color: theme.colors.muted, marginTop: 3 }}>Soft Access Point Mode</Text>
+          </View>
+          <Badge label={status === 'online' ? '● Activ' : 'Offline'} tone={status === 'online' ? 'green' : 'red'} />
+        </View>
+        <InfoRow label="IP" value={data?.ip ?? '--'} />
+        <InfoRow label="Canal" value={`CH ${data?.channel ?? '--'}`} />
+        <InfoRow label="RSSI" value={`${Math.round(data?.rssi ?? -99)} dBm`} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 10 }}>
+          <Text style={{ fontSize: 14, color: theme.colors.muted, fontFamily: theme.font.medium }}>MAC</Text>
+          <Text style={{ fontSize: 14, fontFamily: theme.font.mono, color: theme.colors.text }}>{data?.mac ?? '--'}</Text>
+        </View>
+      </View>
+      <SheetButton label="Închide" variant="secondary" onPress={onClose} />
+    </>
+  );
+}
+
+function WifiCredsSheet({ data, onClose, onSave }: { data: any; onClose: () => void; onSave: (payload: {
+  staSsid: string;
+  staPassword: string;
+  apSsid: string;
+  apPassword: string;
+  reconnect: boolean;
+}) => boolean; }) {
+  const [ssid, setSsid] = useState<string>(data?.ssid ?? '');
+  const [pass, setPass] = useState<string>('');
+  const [apSsid, setApSsid] = useState<string>('SUDO_AP');
+  const [apPass, setApPass] = useState<string>('');
+
+  const handleSave = (reconnect: boolean) => {
+    if (!ssid.trim()) {
+      Alert.alert('Eroare', 'Introduceți SSID-ul rețelei');
+      return;
+    }
+    const ok = onSave({
+      staSsid: ssid.trim(),
+      staPassword: pass,
+      apSsid: apSsid.trim(),
+      apPassword: apPass,
+      reconnect
+    });
+
+    if (ok) {
+      const msg = reconnect 
+        ? 'Credențiale salvate. ESP32 se reconectează...' 
+        : 'Credențiale salvate în ESP32.';
+      showToast(msg, 'LONG');
+      onClose();
+    } else {
+      Alert.alert('MQTT indisponibil', 'Nu se poate trimite comanda. Verificați conexiunea MQTT.');
+    }
+  };
+
+  return (
+    <>
+      <SheetTitle title="Credențiale WiFi" subtitle="Rețeaua la care se conectează ESP32 ca stație (STA)" />
+      <SheetField label="Nume rețea (SSID)">
+        <SheetInput placeholder="ex: Casa_mea_WiFi" value={ssid} onChangeText={setSsid} />
+      </SheetField>
+      <SheetField label="Parolă WiFi">
+        <SheetInput placeholder="Parola rețelei" value={pass} onChangeText={setPass} secureTextEntry />
+      </SheetField>
+      <SheetField label="Soft AP SSID">
+        <SheetInput placeholder="Numele AP creat de ESP32" value={apSsid} onChangeText={setApSsid} />
+      </SheetField>
+      <SheetField label="Parolă Soft AP">
+        <SheetInput placeholder="Parola pentru AP" value={apPass} onChangeText={setApPass} secureTextEntry />
+      </SheetField>
+      <SheetButton label="Salvează & Reconectează" variant="primary" onPress={() => handleSave(true)} />
+      <SheetButton label="Doar salvează" variant="secondary" onPress={() => handleSave(false)} />
+      <SheetButton label="Anulează" variant="secondary" onPress={onClose} />
+    </>
+  );
+}
+
+function MqttSheet({ onClose, onSave }: { onClose: () => void; onSave: (payload: {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+}) => boolean; }) {
+  const [host, setHost] = useState<string>(MQTT_BROKER);
+  const [port, setPort] = useState<string>(String(MQTT_PORT));
+  const [user, setUser] = useState<string>('emqx');
+  const [pass, setPass] = useState<string>('');
+
+  const handleSave = () => {
+    if (!host.trim() || !port.trim()) {
+      Alert.alert('Eroare', 'Completați adresa și portul MQTT');
+      return;
+    }
+    const parsedPort = Number(port);
+    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+      Alert.alert('Eroare', 'Port invalid');
+      return;
+    }
+
+    const ok = onSave({
+      host: host.trim(),
+      port: Math.round(parsedPort),
+      user: user.trim(),
+      pass
+    });
+
+    if (ok) {
+      showToast(`Config MQTT trimisă: ${host}:${port}`, 'LONG');
+      onClose();
+    } else {
+      Alert.alert('MQTT indisponibil', 'Nu se poate trimite comanda. Verificați conexiunea MQTT.');
+    }
+  };
+
+  return (
+    <>
+      <SheetTitle title="Configurare MQTT" subtitle="Broker-ul la care se conectează ESP32" />
+      <SheetField label="Adresă broker">
+        <SheetInput value={host} onChangeText={setHost} placeholder="ex: 192.168.4.1" />
+      </SheetField>
+      <SheetField label="Port">
+        <SheetInput value={port} onChangeText={setPort} placeholder="1883" />
+      </SheetField>
+      <SheetField label="Utilizator">
+        <SheetInput value={user} onChangeText={setUser} placeholder="emqx" />
+      </SheetField>
+      <SheetField label="Parolă">
+        <SheetInput value={pass} onChangeText={setPass} secureTextEntry placeholder="••••••" />
+      </SheetField>
+      <SheetButton label="Salvează" variant="primary" onPress={handleSave} />
+      <SheetButton label="Anulează" variant="secondary" onPress={onClose} />
+    </>
+  );
+}
+
+function FirmwareSheet({ onClose, onCheckUpdates }: { onClose: () => void; onCheckUpdates: () => void }) {
+  const { theme } = useAppTheme();
+
+  return (
+    <>
+      <SheetTitle title="Firmware" subtitle="Informații versiune curentă" />
+      <InfoRow label="Versiune" value="v2.1.0" />
+      <InfoRow label="Build date" value="2026.04.07" />
+      <InfoRow label="SDK" value="ESP-IDF 5.2" />
+      <InfoRow label="Chip" value="ESP32-C3" />
+      <View style={{ height: 12 }} />
+      <View style={{ backgroundColor: theme.colors.surfaceMuted, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, padding: 16 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+          <Text style={{ fontSize: 14, color: theme.colors.muted, fontFamily: theme.font.medium }}>Firmware OTA</Text>
+          <Badge label="Latest" tone="green" />
+        </View>
+        <Text style={{ fontSize: 13, color: theme.colors.muted, lineHeight: 19 }}>Ești pe cea mai recentă versiune disponibilă.</Text>
+      </View>
+      <SheetButton label="Verifică actualizări" variant="secondary" onPress={onCheckUpdates} />
+      <SheetButton label="Închide" variant="secondary" onPress={onClose} />
+    </>
+  );
+}
+
+// ─── Device Info Card ─────────────────────────────────────────────────────────
+
+function DeviceInfoCard({ data, status }: { data: any; status: string }) {
+  const { theme } = useAppTheme();
+  const windowWidth = Dimensions.get('window').width;
+  const isWideScreen = windowWidth > 768;
+  const uptimeStr = data?.uptime ? formatUptime(Math.floor(data.uptime)) : '--:--:--';
+
+  const gridItems = [
+    { label: 'IP Adresă',  value: data?.ip ?? '--',          color: theme.colors.success },
+    { label: 'MAC',        value: data?.mac ?? '--',          color: theme.colors.muted,   small: true },
+    { label: 'Uptime',     value: uptimeStr,                  color: theme.colors.warning },
+    { label: 'Heap liber', value: '142 KB',                   color: theme.colors.primary },
+    { label: 'Flash',      value: '4 MB',                     color: theme.colors.text },
+    { label: 'CPU',        value: '160 MHz',                  color: theme.colors.text }
+  ];
+
+  return (
+    <View style={{ backgroundColor: '#141f18', borderWidth: 1, borderColor: '#1e3328', borderRadius: theme.radius.lg, padding: 20, marginBottom: 8, overflow: 'hidden' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+        <View>
+          <Text style={{ fontSize: 18, fontFamily: theme.font.bold, color: theme.colors.text }}>ESP32-C3 Super Mini</Text>
+          <Text style={{ fontSize: 13, color: theme.colors.muted, marginTop: 3 }}>SUDO · v2.1.0</Text>
+        </View>
+        <Badge label={status === 'online' ? '● ONLINE' : '○ OFFLINE'} tone={status === 'online' ? 'green' : 'red'} />
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+        {gridItems.map((item) => (
+          <View key={item.label} style={{ width: isWideScreen ? '23%' : '46%' }}>
+            <Text style={{ fontSize: 12, color: theme.colors.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6, fontFamily: theme.font.medium }}>
+              {item.label}
+            </Text>
+            <Text style={{ fontSize: item.small ? 14 : 17, fontFamily: theme.font.monoMedium, color: item.color, fontWeight: '700' }} numberOfLines={1}>
+              {item.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {/* glow accent */}
+      <View style={{ position: 'absolute', right: -20, bottom: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(61,220,132,0.07)' }} pointerEvents="none" />
+    </View>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
+export default function SettingsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { data, status, mqttStatus, publishCommand, sendModuleCommand, moduleStates, lastCommandAck } = useESP32();
+
+  const [sheet, setSheet] = useState<SheetId>(null);
+  const [softAp, setSoftAp] = useState(true);
+  const [mqttAutoReconnect, setMqttAutoReconnect] = useState(true);
+  const [oledEnabled, setOledEnabled] = useState(true);
+  const [deepSleep, setDeepSleep] = useState(false);
+  const [pendingCommands, setPendingCommands] = useState<Record<string, string>>({});
+
+  const closeSheet = useCallback(() => setSheet(null), []);
+
+  const publishSpecCommand = useCallback(
+    (action: string, params: Record<string, unknown> = {}) => {
+      const id = `cmd-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const ok = publishCommand({
+        id,
+        action,
+        params,
+        ts: new Date().toISOString(),
+        source: 'mobile-app'
+      });
+
+      if (ok) {
+        setPendingCommands((prev) => ({ ...prev, [id]: action }));
+      }
+
+      return ok;
+    },
+    [publishCommand]
+  );
+
+  useEffect(() => {
+    if (!lastCommandAck?.id) {
+      return;
+    }
+
+    const action = pendingCommands[lastCommandAck.id];
+    if (!action) {
+      return;
+    }
+
+    const normalizedStatus = lastCommandAck.status.trim().toLowerCase();
+    const isSuccess = ['ok', 'success', 'done', 'applied'].includes(normalizedStatus);
+    const text = isSuccess
+      ? `ACK ${action}: ${lastCommandAck.message ?? 'OK'}`
+      : `ACK ${action}: ${lastCommandAck.message ?? 'Eroare'}`;
+    showToast(text, 'SHORT');
+
+    setPendingCommands((prev) => {
+      const next = { ...prev };
+      delete next[lastCommandAck.id];
+      return next;
+    });
+  }, [lastCommandAck, pendingCommands]);
+
+  const handleRestart = () => {
+    Alert.alert(
+      'Restart ESP32',
+      'Ești sigur că vrei să repornești dispozitivul?',
+      [
+        { text: 'Anulează', style: 'cancel' },
+        {
+          text: 'Restart',
+          style: 'destructive',
+          onPress: () => {
+            const ok = publishSpecCommand('system.restart');
+            showToast(ok ? 'Comandă restart trimisă.' : 'MQTT indisponibil. Restart netrimis.', 'LONG');
+          }
+        }
+      ]
+    );
+  };
+
+  const handleFactoryReset = () => {
+    Alert.alert(
+      'Factory Reset',
+      'ATENȚIE: Aceasta va șterge TOATE setările salvate. Ești sigur?',
+      [
+        { text: 'Anulează', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            const ok = publishSpecCommand('system.factory_reset', {
+              erase_nvs: true,
+              reboot: true
+            });
+            showToast(ok ? 'Comandă factory reset trimisă.' : 'MQTT indisponibil. Factory reset netrimis.', 'LONG');
+            // Reset UI state
+            setSoftAp(true);
+            setMqttAutoReconnect(true);
+            setOledEnabled(true);
+            setDeepSleep(false);
+          }
+        }
+      ]
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>Setări</Text>
+            <Text style={styles.headerSub}>SUDO · ESP32-C3</Text>
+          </View>
+        </View>
+
+        {/* ── Device Info Card ── */}
+        <DeviceInfoCard data={data} status={status} />
+
+        {/* ══ WiFi ══ */}
+        <SectionLabel title="Rețea WiFi" />
+        <SettingGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(56,189,248,0.12)"><Ionicons name="wifi-outline" size={20} color={theme.colors.info} /></IconBox>}
+            label="Rețea conectată"
+            value={data?.ssid ? `${data.ssid} · Soft AP Mode` : 'SUDO_AP · Soft AP Mode'}
+            right={<><WifiSignalBars rssi={data?.rssi ?? -99} /><Chevron /></>}
+            onPress={() => setSheet('wifi-current')}
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(232,84,42,0.12)"><Ionicons name="key-outline" size={20} color={theme.colors.primary} /></IconBox>}
+            label="Credențiale WiFi"
+            value={`SSID: ${data?.ssid ?? 'SUDO_Network'}`}
+            right={<><Badge label="Editează" tone="orange" /><Chevron /></>}
+            onPress={() => setSheet('wifi-creds')}
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(61,220,132,0.1)"><Ionicons name="radio-outline" size={20} color={theme.colors.success} /></IconBox>}
+            label="Soft AP Mode"
+            value={`${data?.ip ?? '192.168.4.1'} · SUDO_AP`}
+            right={
+              <Switch
+                value={softAp}
+                onValueChange={(value) => {
+                  setSoftAp(value);
+                  const ok = publishSpecCommand('wifi.softap.set', { enabled: value });
+                  if (!ok) {
+                    showToast('MQTT indisponibil. Comanda Soft AP nu a fost trimisă.', 'SHORT');
+                  }
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+            isLast
+          />
+        </SettingGroup>
+
+        {/* ══ MQTT ══ */}
+        <SectionLabel title="MQTT Broker" />
+        <SettingGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(167,139,250,0.12)"><Ionicons name="flash-outline" size={20} color="#a78bfa" /></IconBox>}
+            label="Server MQTT"
+            value={`${MQTT_BROKER} : ${MQTT_PORT}`}
+            right={<><Badge label={mqttStatus === 'online' ? '● Activ' : '● Offline'} tone={mqttStatus === 'online' ? 'green' : 'red'} /><Chevron /></>}
+            onPress={() => setSheet('mqtt')}
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(61,220,132,0.1)"><Ionicons name="refresh-outline" size={20} color={theme.colors.success} /></IconBox>}
+            label="Auto-reconnect"
+            desc="Reconectare automată la broker"
+            right={
+              <Switch
+                value={mqttAutoReconnect}
+                onValueChange={(value) => {
+                  setMqttAutoReconnect(value);
+                  const ok = publishSpecCommand('mqtt.set_auto_reconnect', {
+                    enabled: value,
+                    max_retries: 5,
+                    retry_ms: 5000
+                  });
+                  if (!ok) {
+                    showToast('MQTT indisponibil. Setarea nu a fost trimisă.', 'SHORT');
+                  }
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+            isLast
+          />
+        </SettingGroup>
+
+        {/* ══ Sensors ══ */}
+        <SectionLabel title="Senzori & Sampling" />
+        <SettingGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(245,158,11,0.12)"><Ionicons name="thermometer-outline" size={20} color={theme.colors.warning} /></IconBox>}
+            label="NTC Termistor"
+            value="GPIO2 · 10kΩ · ADC 12-bit"
+            right={
+              <Switch
+                value={moduleStates.temperature}
+                onValueChange={(value) => {
+                  const ok = sendModuleCommand('temperature', value);
+                  if (!ok) {
+                    showToast('MQTT indisponibil. Comanda NTC nu a fost trimisă.', 'SHORT');
+                  }
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(56,189,248,0.12)"><Ionicons name="tv-outline" size={20} color={theme.colors.info} /></IconBox>}
+            label="OLED Display"
+            value="SSD1306 · 128×64 · 0x3C"
+            right={
+              <Switch
+                value={oledEnabled}
+                onValueChange={(value) => {
+                  setOledEnabled(value);
+                  const ok = publishSpecCommand('display.oled.set', { enabled: value });
+                  if (!ok) {
+                    showToast('MQTT indisponibil. Comanda OLED nu a fost trimisă.', 'SHORT');
+                  }
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+            isLast
+          />
+        </SettingGroup>
+
+        {/* ══ System ══ */}
+        <SectionLabel title="Sistem" />
+        <SettingGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(255,255,255,0.06)"><Ionicons name="cube-outline" size={20} color={theme.colors.muted} /></IconBox>}
+            label="Firmware"
+            value="v2.1.0 · Build 2026.04.07"
+            right={<><Badge label="Latest" tone="green" /><Chevron /></>}
+            onPress={() => setSheet('firmware')}
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(255,255,255,0.06)"><Ionicons name="moon-outline" size={20} color={theme.colors.muted} /></IconBox>}
+            label="Deep Sleep"
+            desc="Mod consum redus când e inactiv"
+            right={
+              <Switch
+                value={deepSleep}
+                onValueChange={(value) => {
+                  setDeepSleep(value);
+                  const ok = publishSpecCommand('system.deep_sleep.set', {
+                    enabled: value,
+                    idle_timeout_s: 60
+                  });
+                  if (!ok) {
+                    showToast('MQTT indisponibil. Comanda Deep Sleep nu a fost trimisă.', 'SHORT');
+                  }
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+            isLast
+          />
+        </SettingGroup>
+
+        {/* ══ Danger Zone ══ */}
+        <SectionLabel title="Zona periculoasă" danger />
+        <DangerGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(245,158,11,0.12)"><Ionicons name="refresh-circle-outline" size={20} color={theme.colors.warning} /></IconBox>}
+            label="Restart ESP32"
+            desc="Repornești dispozitivul"
+            right={<Chevron color={theme.colors.warning} />}
+            onPress={handleRestart}
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(232,64,64,0.12)"><Ionicons name="warning-outline" size={20} color={theme.colors.danger} /></IconBox>}
+            label="Factory Reset"
+            desc="Șterge toate setările salvate"
+            right={<Chevron color={theme.colors.danger} />}
+            onPress={handleFactoryReset}
+            isLast
+          />
+        </DangerGroup>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      {/* ══ Sheets ══ */}
+      <BottomSheet visible={sheet === 'wifi-current'} onClose={closeSheet}>
+        <WifiCurrentSheet data={data} status={status} onClose={closeSheet} />
+      </BottomSheet>
+      <BottomSheet visible={sheet === 'wifi-creds'} onClose={closeSheet}>
+        <WifiCredsSheet
+          data={data}
+          onClose={closeSheet}
+          onSave={({ staSsid, staPassword, apSsid, apPassword, reconnect }) =>
+            publishSpecCommand('wifi.set_credentials', {
+              sta_ssid: staSsid,
+              sta_password: staPassword,
+              ap_ssid: apSsid,
+              ap_password: apPassword,
+              reconnect
+            })
+          }
+        />
+      </BottomSheet>
+      <BottomSheet visible={sheet === 'mqtt'} onClose={closeSheet}>
+        <MqttSheet
+          onClose={closeSheet}
+          onSave={({ host, port, user, pass }) =>
+            publishSpecCommand('mqtt.set_broker', {
+              host,
+              port,
+              username: user,
+              password: pass,
+              transport: 'tcp'
+            })
+          }
+        />
+      </BottomSheet>
+      <BottomSheet visible={sheet === 'firmware'} onClose={closeSheet}>
+        <FirmwareSheet
+          onClose={closeSheet}
+          onCheckUpdates={() => {
+            const ok = publishSpecCommand('firmware.check');
+            showToast(ok ? 'Cerere verificare firmware trimisă.' : 'MQTT indisponibil.', 'SHORT');
+          }}
+        />
+      </BottomSheet>
+    </SafeAreaView>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const createStyles = (theme: AppTheme) => {
+  const windowWidth = Dimensions.get('window').width;
+  const isWideScreen = windowWidth > 768;
+  
+  return StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: theme.colors.background
+    },
+    content: {
+      paddingHorizontal: isWideScreen ? 28 : 16,
+      paddingTop: 12,
+      paddingBottom: 104,
+      maxWidth: isWideScreen ? 1200 : '100%',
+      alignSelf: 'center',
+      width: '100%'
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 16,
+      paddingHorizontal: 4,
+      marginBottom: 8
+    },
+    headerTitle: {
+      fontSize: isWideScreen ? 28 : 19,
+      fontFamily: theme.font.bold,
+      color: theme.colors.text
+    },
+    headerSub: {
+      fontSize: isWideScreen ? 14 : 12,
+      color: theme.colors.muted,
+      marginTop: 2,
+      fontFamily: theme.font.medium
+    }
+  });
+};
+
