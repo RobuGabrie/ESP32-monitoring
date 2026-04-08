@@ -143,158 +143,72 @@ const RIGHT_PINS: PinDef[] = [
 ];
 
 const LEGEND: { cat: PinCategory; label: string }[] = [
-  { cat: 'power',     label: 'Power'      },
-  { cat: 'i2c',       label: 'I2C Bus'    },
-  { cat: 'button',    label: 'Button'     },
-  { cat: 'adc',       label: 'Thermistor' },
-  { cat: 'interrupt', label: 'INA Alert'  },
+  { cat: 'power',     label: 'Putere'      },
+  { cat: 'i2c',       label: 'Bus I2C'    },
+  { cat: 'button',    label: 'Buton'     },
+  { cat: 'adc',       label: 'Termistor' },
+  { cat: 'interrupt', label: 'Alertă INA'  },
   { cat: 'gpio',      label: 'GPIO'       },
 ];
 
-function PinConnector({ color, pointRight }: { color: string; pointRight: boolean }) {
-  // A dashed line with a small triangular arrowhead pointing toward the chip
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      {pointRight && (
-        <View style={{
-          width: 0, height: 0,
-          borderTopWidth: 4, borderBottomWidth: 4, borderLeftWidth: 5,
-          borderTopColor: 'transparent', borderBottomColor: 'transparent',
-          borderLeftColor: color,
-          marginRight: 1,
-        }} />
-      )}
-      <View style={{
-        width: 16,
-        height: 1,
-        borderStyle: 'dashed',
-        borderTopWidth: 1,
-        borderColor: color,
-      }} />
-      {!pointRight && (
-        <View style={{
-          width: 0, height: 0,
-          borderTopWidth: 4, borderBottomWidth: 4, borderRightWidth: 5,
-          borderTopColor: 'transparent', borderBottomColor: 'transparent',
-          borderRightColor: color,
-          marginLeft: 1,
-        }} />
-      )}
-    </View>
-  );
-}
-
-function PinLabel({ pin, side, styles }: {
+function PinLabel({ pin, side, styles, onPress, isSelected, isOffline }: {
   pin: PinDef;
   side: 'left' | 'right';
   styles: ReturnType<typeof createStyles>;
+  onPress?: () => void;
+  isSelected?: boolean;
+  isOffline?: boolean;
 }) {
-  const c = PIN_COLORS[pin.category];
-  const isLeft = side === 'left';
+  const c = isOffline ? PIN_COLORS.gpio + '40' : PIN_COLORS[pin.category];
 
-  // Left reads outward:  fn → alt →──▶ [badge] → chip
-  // Right reads outward: chip → [badge] ▶──→ alt → fn
-  if (isLeft) {
+  if (side === 'left') {
     return (
-      <View style={[styles.pinLabelRow, styles.pinLabelRowLeft]}>
-        <Text style={[styles.pinFnText, { textAlign: 'right' }]} numberOfLines={1}>{pin.fn}</Text>
-        {pin.alt ? (
-          <Text style={[styles.pinAltText, { textAlign: 'right' }]} numberOfLines={1}>{pin.alt}</Text>
-        ) : (
-          <View style={styles.pinAltSpacer} />
-        )}
-        <PinConnector color={c + 'AA'} pointRight={false} />
-        <View style={[styles.pinBadge, { backgroundColor: c + '20', borderColor: c + '55' }]}>
-          <Text style={[styles.pinBadgeText, { color: c }]}>{pin.gpio}</Text>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.pinLabelRow,
+          styles.pinLabelRowLeft,
+          pressed && { opacity: 0.6 },
+          isSelected && styles.pinLabelSelected,
+          isOffline && styles.pinLabelOffline,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`${pin.gpio} – ${pin.fn}${isOffline ? ' (offline)' : ''}`}
+      >
+        <Text style={styles.pinFnText} numberOfLines={1}>{pin.fn}</Text>
+        <View style={[styles.pinConnectorLine, { backgroundColor: c + '50' }]} />
+        <View style={[styles.pinBadge, { backgroundColor: c + '18', borderColor: c + '60' }]}>
+          <View style={[styles.pinColorDot, { backgroundColor: c }]} />
+          <Text style={[styles.pinBadgeText, { color: c }]} numberOfLines={1}>{pin.gpio}</Text>
         </View>
-      </View>
+      </Pressable>
     );
   }
 
   return (
-    <View style={[styles.pinLabelRow, styles.pinLabelRowRight]}>
-      <View style={[styles.pinBadge, { backgroundColor: c + '20', borderColor: c + '55' }]}>
-        <Text style={[styles.pinBadgeText, { color: c }]}>{pin.gpio}</Text>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pinLabelRow,
+        styles.pinLabelRowRight,
+        pressed && { opacity: 0.6 },
+        isSelected && styles.pinLabelSelected,
+        isOffline && styles.pinLabelOffline,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${pin.gpio} – ${pin.fn}${isOffline ? ' (offline)' : ''}`}
+    >
+      <View style={[styles.pinBadge, { backgroundColor: c + '18', borderColor: c + '60' }]}>
+        <View style={[styles.pinColorDot, { backgroundColor: c }]} />
+        <Text style={[styles.pinBadgeText, { color: c }]} numberOfLines={1}>{pin.gpio}</Text>
       </View>
-      <PinConnector color={c + 'AA'} pointRight={true} />
-      {pin.alt ? (
-        <Text style={[styles.pinAltText, { textAlign: 'left' }]} numberOfLines={1}>{pin.alt}</Text>
-      ) : (
-        <View style={styles.pinAltSpacer} />
-      )}
-      <Text style={[styles.pinFnText, { textAlign: 'left' }]} numberOfLines={1}>{pin.fn}</Text>
-    </View>
+      <View style={[styles.pinConnectorLine, { backgroundColor: c + '50' }]} />
+      <Text style={styles.pinFnText} numberOfLines={1}>{pin.fn}</Text>
+    </Pressable>
   );
 }
 
-function PinoutCard({ theme }: { theme: AppTheme }) {
-  const styles = useMemo(() => createStyles(theme), [theme]);
 
-  return (
-    <View style={styles.pinoutCard}>
-      {/* Header */}
-      <View style={styles.pinoutHeaderRow}>
-        <View style={styles.pinoutTitleWrap}>
-          <Ionicons name="hardware-chip-outline" size={18} color={theme.colors.primary} />
-          <Text style={styles.pinoutTitle}>ESP32-C3 Super Mini</Text>
-        </View>
-        <Text style={styles.pinoutSubtitle}>RISC-V · 160 MHz · Wi-Fi / BLE</Text>
-      </View>
-
-      {/* Board diagram */}
-      <View style={styles.boardContainer}>
-        {/* Left column */}
-        <View style={styles.boardSide}>
-          {LEFT_PINS.map((p) => (
-            <PinLabel key={p.gpio} pin={p} side="left" styles={styles} />
-          ))}
-        </View>
-
-        {/* Central chip representation */}
-        <View style={styles.boardChip}>
-          {/* USB-C hint */}
-          <View style={styles.usbStub}>
-            <Text style={styles.usbText}>USB-C</Text>
-          </View>
-          {/* Pin dots — left */}
-          <View style={styles.chipPinCol}>
-            {LEFT_PINS.map((p, i) => (
-              <View key={i} style={[styles.chipPinDot, { backgroundColor: PIN_COLORS[p.category] }]} />
-            ))}
-          </View>
-          {/* Chip label */}
-          <View style={styles.chipCenter}>
-            <Text style={styles.chipMainLabel}>ESP32</Text>
-            <Text style={styles.chipSubLabel}>C3</Text>
-          </View>
-          {/* Pin dots — right */}
-          <View style={styles.chipPinCol}>
-            {RIGHT_PINS.map((p, i) => (
-              <View key={i} style={[styles.chipPinDot, { backgroundColor: PIN_COLORS[p.category] }]} />
-            ))}
-          </View>
-        </View>
-
-        {/* Right column */}
-        <View style={styles.boardSide}>
-          {RIGHT_PINS.map((p) => (
-            <PinLabel key={p.gpio} pin={p} side="right" styles={styles} />
-          ))}
-        </View>
-      </View>
-
-      {/* Legend */}
-      <View style={styles.pinoutLegend}>
-        {LEGEND.map(({ cat, label }) => (
-          <View key={cat} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: PIN_COLORS[cat] }]} />
-            <Text style={styles.legendLabel}>{label}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 // Compact SensorTile - tapping opens the detail modal
 function SensorTile({ sensor, onPress, theme }: {
@@ -302,7 +216,23 @@ function SensorTile({ sensor, onPress, theme }: {
   onPress: () => void;
   theme: AppTheme;
 }) {
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { width } = useWindowDimensions();
+  const styles = useMemo(() => createStyles(theme, width), [theme, width]);
+  
+  // Map sensor category to pin category colors
+  const getCategoryColor = (cat?: SensorDetail['category']): string => {
+    if (!cat) return PIN_COLORS.gpio;
+    switch (cat) {
+      case 'i2c-bus': return PIN_COLORS.i2c;
+      case 'i2c-device': return PIN_COLORS.i2c;
+      case 'analog': return PIN_COLORS.adc;
+      case 'power': return PIN_COLORS.power;
+      case 'gpio': return PIN_COLORS.gpio;
+      default: return PIN_COLORS.gpio;
+    }
+  };
+
+  const categoryColor = getCategoryColor(sensor.category);
 
   return (
     <Pressable
@@ -312,8 +242,11 @@ function SensorTile({ sensor, onPress, theme }: {
       accessibilityLabel={`${sensor.label} – ${sensor.sensor ?? sensor.type}`}
     >
       <View style={styles.sensorTileRow}>
-        <View style={styles.sensorTileIcon}>
-          <Ionicons name={sensorIcon(sensor.type)} size={16} color={theme.colors.textSoft} />
+        <View style={[styles.sensorTileIcon, { 
+          backgroundColor: categoryColor + '15',
+          borderColor: categoryColor + '30'
+        }]}>
+          <Ionicons name={sensorIcon(sensor.type)} size={18} color={categoryColor} />
         </View>
         <View style={styles.sensorTileMeta}>
           <Text style={styles.sensorTileLabel} numberOfLines={1}>{sensor.label}</Text>
@@ -343,7 +276,8 @@ function SensorDetailModal({ sensor, visible, onClose, theme }: {
   onClose: () => void;
   theme: AppTheme;
 }) {
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { width } = useWindowDimensions();
+  const styles = useMemo(() => createStyles(theme, width), [theme, width]);
   if (!sensor) return null;
 
   return (
@@ -379,13 +313,13 @@ function SensorDetailModal({ sensor, visible, onClose, theme }: {
 
         {/* Live value */}
         <View style={styles.modalValueCard}>
-          <Text style={styles.modalValueLabel}>Current Value</Text>
+          <Text style={styles.modalValueLabel}>Valoare Curentă</Text>
           <View style={styles.modalValueRow}>
             <Text style={styles.modalValueText}>{sensor.value}</Text>
             {sensor.status && (
               <View style={styles.modalStatusRow}>
                 <View style={[styles.statusDot, sensor.status === 'active' && styles.statusDotActive]} />
-                <Text style={styles.modalStatusText}>{sensor.status === 'active' ? 'Active' : 'Idle'}</Text>
+                <Text style={styles.modalStatusText}>{sensor.status === 'active' ? 'Activ' : 'Inactiv'}</Text>
               </View>
             )}
           </View>
@@ -395,7 +329,7 @@ function SensorDetailModal({ sensor, visible, onClose, theme }: {
         {/* Specs list */}
         {sensor.specs && sensor.specs.length > 0 && (
           <View style={styles.modalSpecsSection}>
-            <Text style={styles.modalSpecsSectionTitle}>Hardware Specs</Text>
+            <Text style={styles.modalSpecsSectionTitle}>Specificații Hardware</Text>
             {sensor.specs.map((spec, idx) => (
               <View key={idx} style={styles.modalSpecRow}>
                 <View style={styles.modalSpecBullet} />
@@ -411,7 +345,110 @@ function SensorDetailModal({ sensor, visible, onClose, theme }: {
           onPress={onClose}
           style={({ pressed }) => [styles.modalDoneBtn, pressed && { opacity: 0.7 }]}
         >
-          <Text style={styles.modalDoneBtnText}>Done</Text>
+          <Text style={styles.modalDoneBtnText}>Gata</Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+// Pin detail modal — shows when tapping a pin on the board
+function PinDetailModal({ pin, visible, onClose, liveValue, theme }: {
+  pin: PinDef | null;
+  visible: boolean;
+  onClose: () => void;
+  liveValue?: string | number;
+  theme: AppTheme;
+}) {
+  const { width } = useWindowDimensions();
+  const styles = useMemo(() => createStyles(theme, width), [theme, width]);
+  if (!pin) return null;
+
+  const c = PIN_COLORS[pin.category];
+
+  // Resolve pin-specific info from firmware config
+  const pinNum = parseInt(pin.gpio.replace(/\D/g, ''));
+  const getSpecs = (): string[] => {
+    if (pinNum === ESP32_CONFIG.pins.I2C_SDA) return ['I2C Data Line', ESP32_CONFIG.i2c.frequency, 'MPU9250, INA219, RTC'];
+    if (pinNum === ESP32_CONFIG.pins.I2C_SCL) return ['I2C Clock Line', ESP32_CONFIG.i2c.frequency];
+    if (pinNum === ESP32_CONFIG.pins.BTN_NEXT) return ['Navigation Button', '200ms debounce'];
+    if (pinNum === ESP32_CONFIG.pins.BTN_PREV) return ['Navigation Button', '200ms debounce'];
+    if (pinNum === ESP32_CONFIG.pins.INA_INT) return ['Power Alert Interrupt', 'Configurable thresholds'];
+    if (pinNum === ESP32_CONFIG.pins.THERM_PIN) return ['NTC 10kΩ', `β = ${ESP32_CONFIG.sensors.thermistor.bCoeff}`, ESP32_CONFIG.sensors.thermistor.calibration];
+    if (pin.category === 'power') return [pin.fn];
+    return ['Published to MQTT'];
+  };
+
+  const specs = getSpecs();
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHandle} />
+
+        {/* Pin header */}
+        <View style={styles.modalHeader}>
+          <View style={[styles.modalIconWrap, { backgroundColor: c + '15', borderColor: c + '30' }]}>
+            <Ionicons
+              name={
+                pin.category === 'i2c' ? 'git-branch-outline' :
+                pin.category === 'button' ? 'radio-button-on-outline' :
+                pin.category === 'adc' ? 'thermometer-outline' :
+                pin.category === 'interrupt' ? 'flash-outline' :
+                pin.category === 'power' ? 'battery-charging-outline' :
+                'git-commit-outline'
+              }
+              size={22}
+              color={c}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>{pin.gpio}</Text>
+            <Text style={styles.modalSubtitle}>{pin.fn}</Text>
+          </View>
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <Ionicons name="close" size={20} color={theme.colors.text} />
+          </Pressable>
+        </View>
+
+        {/* Live value if available */}
+        <View style={styles.modalValueCard}>
+          <Text style={styles.modalValueLabel}>Valoare Live</Text>
+          <View style={styles.modalValueRow}>
+            <Text style={styles.modalValueText}>{liveValue ?? '—'}</Text>
+            <View style={[styles.pinDetailBadge, { backgroundColor: c + '20', borderColor: c + '50' }]}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c }} />
+              <Text style={[styles.pinDetailBadgeText, { color: c }]}>
+                {pin.category.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+          {pin.alt ? <Text style={styles.modalTypeTag}>{pin.alt}</Text> : null}
+        </View>
+
+        {/* Specs */}
+        <View style={styles.modalSpecsSection}>
+          <Text style={styles.modalSpecsSectionTitle}>Detalii Pin</Text>
+          {specs.map((spec, idx) => (
+            <View key={idx} style={styles.modalSpecRow}>
+              <View style={[styles.modalSpecBullet, { backgroundColor: c }]} />
+              <Text style={styles.modalSpecText}>{spec}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={onClose}
+          style={({ pressed }) => [styles.modalDoneBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.modalDoneBtnText}>Gata</Text>
         </Pressable>
       </View>
     </Modal>
@@ -420,9 +457,11 @@ function SensorDetailModal({ sensor, visible, onClose, theme }: {
 
 export default function SensorsScreen() {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { width } = useWindowDimensions();
+  const styles = useMemo(() => createStyles(theme, width), [theme, width]);
   const { ioLog, status, data, selectedRange, setTimeRange, mqttStatus } = useESP32();
   const [selectedPin, setSelectedPin] = useState<string | null>(null);
+  const [selectedBoardPin, setSelectedBoardPin] = useState<PinDef | null>(null);
   const [serialOpen, setSerialOpen] = useState(false);
   const serialScrollRef = useRef<ScrollView>(null);
 
@@ -438,13 +477,13 @@ export default function SensorsScreen() {
 
     gpioPairs.forEach(([pin, value]) => {
       const pinNum = parseInt(pin.replace(/\D/g, ''));
-      let sensorType = 'Digital I/O';
+      let sensorType = 'I/O Digital';
       let category: SensorDetail['category'] = 'gpio';
       let type: SensorDetail['type'] = 'digital';
       let specs: string[] = [];
       
       if (pinNum === ESP32_CONFIG.pins.I2C_SDA) {
-        sensorType = 'I2C Data Line (SDA)';
+        sensorType = 'Linie Date I2C (SDA)';
         category = 'i2c-bus';
         type = 'i2c';
         specs = [
@@ -454,22 +493,22 @@ export default function SensorsScreen() {
           'MPU9250, INA219, RTC'
         ];
       } else if (pinNum === ESP32_CONFIG.pins.I2C_SCL) {
-        sensorType = 'I2C Clock Line (SCL)';
+        sensorType = 'Linie Ceas I2C (SCL)';
         category = 'i2c-bus';
         type = 'i2c';
-        specs = [`GPIO ${ESP32_CONFIG.pins.I2C_SCL}`, ESP32_CONFIG.i2c.frequency, 'Serial clock signal'];
+        specs = [`GPIO ${ESP32_CONFIG.pins.I2C_SCL}`, ESP32_CONFIG.i2c.frequency, 'Semnal ceas serial'];
       } else if (pinNum === ESP32_CONFIG.pins.BTN_NEXT) {
-        sensorType = 'Navigation Button';
-        specs = [`GPIO ${ESP32_CONFIG.pins.BTN_NEXT}`, 'Next button', '200ms debounce'];
+        sensorType = 'Buton Navigare';
+        specs = [`GPIO ${ESP32_CONFIG.pins.BTN_NEXT}`, 'Buton Înainte', '200ms debounce'];
       } else if (pinNum === ESP32_CONFIG.pins.BTN_PREV) {
-        sensorType = 'Navigation Button';
-        specs = [`GPIO ${ESP32_CONFIG.pins.BTN_PREV}`, 'Previous button', '200ms debounce'];
+        sensorType = 'Buton Navigare';
+        specs = [`GPIO ${ESP32_CONFIG.pins.BTN_PREV}`, 'Buton Înapoi', '200ms debounce'];
       } else if (pinNum === ESP32_CONFIG.pins.INA_INT) {
-        sensorType = 'INA219 Interrupt';
+        sensorType = 'Întrerupere INA219';
         category = 'power';
-        specs = [`GPIO ${ESP32_CONFIG.pins.INA_INT}`, 'Power alert interrupt', 'Configurable thresholds'];
+        specs = [`GPIO ${ESP32_CONFIG.pins.INA_INT}`, 'Alertă putere', 'Praguri configurabile'];
       } else if (pinNum === ESP32_CONFIG.pins.THERM_PIN) {
-        sensorType = 'NTC Thermistor';
+        sensorType = 'Termistor NTC';
         type = 'thermal';
         category = 'analog';
         specs = [
@@ -479,8 +518,8 @@ export default function SensorsScreen() {
           ESP32_CONFIG.sensors.thermistor.calibration
         ];
       } else if (ESP32_CONFIG.pins.GPIO_PUBLISH.includes(pinNum)) {
-        sensorType = 'Monitored GPIO';
-        specs = [`GPIO ${pinNum}`, 'Published to MQTT'];
+        sensorType = 'GPIO Monitorizat';
+        specs = [`GPIO ${pinNum}`, 'Publicat pe MQTT'];
       }
 
       details.push({
@@ -502,12 +541,12 @@ export default function SensorsScreen() {
         details.push({
           pin: name,
           label: `ADC ${name.toUpperCase()}`,
-          sensor: 'Analog Input',
+          sensor: 'Intrare Analogică',
           value,
           type: 'analog',
           status: 'active',
           category: 'i2c-device',
-          specs: ['External ADC channel']
+          specs: ['Canal ADC extern']
         });
       });
     }
@@ -520,24 +559,27 @@ export default function SensorsScreen() {
       details.push({
         pin: name,
         label: `INA219 ${name.toUpperCase()}`,
-        sensor: isPower ? 'Power Monitor' : isCurrent ? 'Current Monitor' : 'Voltage Monitor',
+        sensor: isPower ? 'Monitor Putere' : isCurrent ? 'Monitor Curent' : 'Monitor Tensiune',
         value,
         type: 'power',
         status: 'active',
         category: 'power',
-        specs: ['I2C Address: 0x40', ESP32_CONFIG.sensors.battery.range, 'High-side current sensing']
+        specs: ['Adresă I2C: 0x40', ESP32_CONFIG.sensors.battery.range, 'Senzor curent high-side']
       });
     });
 
     return details;
   }, [gpioPairs, pcfPairs, inaPairs]);
 
-  const handlePinPress = (pin: string) => {
-    setSelectedPin(pin);
-  };
-
   const selectedSensor = sensorDetails.find((s) => s.pin === selectedPin);
   const activeGpioCount = gpioPairs.filter(([, v]) => v > 0).length;
+
+  // Live value lookup for board pin modal
+  const getBoardPinLiveValue = (pin: PinDef): string | number | undefined => {
+    const pinNum = pin.gpio.replace(/\D/g, '');
+    const match = gpioPairs.find(([k]) => k.replace(/\D/g, '') === pinNum);
+    return match ? match[1] : undefined;
+  };
 
   // Group sensors by category
   const groupedSensors = useMemo(() => {
@@ -577,103 +619,101 @@ export default function SensorsScreen() {
           mqttStatus={mqttStatus}
         >
 
-          {/* Quick stats bar */}
-          <View style={styles.quickStats}>
+          {/* Quick stats — compact inline row */}
+      
+
+          {/* Interactive board + utilities — responsive row */}
+          <View style={styles.responsiveRow}>
+            {/* Pinout card */}
+         
+
+            {/* Utilities — serial + I2C inline */}
+            <View style={[styles.responsiveRowItem, { justifyContent: 'space-between' }]}>
+              <View style={styles.quickStats}>
             <View style={styles.quickStatItem}>
               <Text style={styles.quickStatValue}>{activeGpioCount}</Text>
-              <Text style={styles.quickStatLabel}>GPIO Active</Text>
+              <Text style={styles.quickStatLabel}>Activ</Text>
             </View>
             <View style={styles.quickStatDivider} />
             <View style={styles.quickStatItem}>
               <Text style={styles.quickStatValue}>{ESP32_CONFIG.i2c.devices.length}</Text>
-              <Text style={styles.quickStatLabel}>I2C Devices</Text>
+              <Text style={styles.quickStatLabel}>I2C</Text>
             </View>
             <View style={styles.quickStatDivider} />
             <View style={styles.quickStatItem}>
               <Text style={styles.quickStatValue}>{sensorDetails.length}</Text>
-              <Text style={styles.quickStatLabel}>Monitored</Text>
+              <Text style={styles.quickStatLabel}>Total</Text>
             </View>
           </View>
 
-          {/* Serial monitor button */}
-          <Pressable
-            style={({ pressed }) => [styles.serialBtn, pressed && styles.serialBtnPressed]}
-            onPressIn={() => setSerialOpen(true)}
-          >
-            <Ionicons name="terminal-outline" size={16} color={theme.colors.textSoft} />
-            <Text style={styles.serialBtnText}>Serial Monitor</Text>
-            <View style={styles.serialBtnBadge}>
-              <Text style={styles.serialBtnBadgeText}>{entries.length}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={theme.colors.muted} style={{ marginLeft: 'auto' }} />
-          </Pressable>
-
-          <PinoutCard theme={theme} />
-
-          {/* I2C Devices - compact list */}
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>I2C Bus</Text>
-            <Text style={styles.panelCaption}>SDA {ESP32_CONFIG.pins.I2C_SDA} / SCL {ESP32_CONFIG.pins.I2C_SCL} · {ESP32_CONFIG.i2c.frequency}</Text>
-
-            <View style={styles.i2cList}>
-              {ESP32_CONFIG.i2c.devices.map((device, idx) => (
-                <View key={idx} style={styles.i2cRow}>
-                  <Ionicons
-                    name={
-                      device.type.includes('IMU') ? 'cube-outline' :
-                      device.type.includes('Power') ? 'flash-outline' :
-                      device.type.includes('RTC') ? 'time-outline' : 'hardware-chip-outline'
-                    }
-                    size={18}
-                    color={theme.colors.textSoft}
-                  />
-                  <View style={styles.i2cRowText}>
-                    <Text style={styles.i2cName}>{device.name}</Text>
-                    <Text style={styles.i2cType}>{device.type}</Text>
-                  </View>
-                  <Text style={styles.i2cAddr}>{device.addr}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Live Sensor Grid — grouped by category */}
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Live Data</Text>
-
-            {(['i2c-bus', 'i2c-device', 'power', 'analog', 'gpio'] as const).map((cat) => {
-              const items = groupedSensors[cat];
-              if (items.length === 0) return null;
-              const label =
-                cat === 'i2c-bus' ? 'I2C Bus' :
-                cat === 'i2c-device' ? 'I2C Devices' :
-                cat === 'power' ? 'Power' :
-                cat === 'analog' ? 'Analog' : 'GPIO';
-              return (
-                <View key={cat}>
-                  <Text style={styles.categoryLabel}>{label}</Text>
-                  <View style={styles.sensorsGrid}>
-                    {items.map((sensor) => (
-                      <SensorTile
-                        key={sensor.pin}
-                        sensor={sensor}
-                        onPress={() => handlePinPress(sensor.pin)}
-                        theme={theme}
-                      />
-                    ))}
-                  </View>
-                </View>
-              );
-            })}
-
-            {sensorDetails.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="radio-outline" size={28} color={theme.colors.textSoft} />
-                <Text style={styles.emptyText}>Waiting for ESP32 data...</Text>
-                <Text style={styles.emptySubtext}>Check MQTT at {ESP32_CONFIG.mqtt.broker}</Text>
+              <View style={[styles.utilRow, { marginBottom: 0, flexDirection: 'column', gap: 12 }]}>
+            <Pressable
+              style={({ pressed }) => [styles.utilCard, pressed && styles.utilCardPressed]}
+              onPressIn={() => setSerialOpen(true)}
+            >
+              <View style={styles.utilIconWrap}>
+                <Ionicons name="terminal-outline" size={16} color={theme.colors.primary} />
               </View>
-            )}
-          </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.utilCardTitle}>Serial</Text>
+                <Text style={styles.utilCardSub}>{entries.length} pachete</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color={theme.colors.muted} />
+            </Pressable>
+
+            <View style={styles.utilCard}>
+              <View style={styles.utilIconWrap}>
+                <Ionicons name="git-branch-outline" size={16} color={PIN_COLORS.i2c} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.utilCardTitle}>Bus I2C</Text>
+                <Text style={styles.utilCardSub}>{ESP32_CONFIG.i2c.frequency}</Text>
+              </View>
+            </View>
+              </View>
+            </View>
+            </View>
+
+            {/* I2C Devices */}
+        
+          
+          {/* Live Sensor Grid — grouped by category */}
+          {sensorDetails.length > 0 && (
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Date Live</Text>
+              {(['power', 'i2c-bus', 'analog', 'gpio'] as const).map((cat) => {
+                const items = groupedSensors[cat];
+                if (items.length === 0) return null;
+                const label =
+                  cat === 'i2c-bus' ? 'Bus I2C' :
+                  cat === 'power' ? 'Putere' :
+                  cat === 'analog' ? 'Analogic' : 'GPIO';
+                return (
+                  <View key={cat}>
+                    <Text style={styles.categoryLabel}>{label}</Text>
+                    <View style={styles.sensorsGrid}>
+                      {items.map((sensor) => (
+                        <SensorTile
+                          key={sensor.pin}
+                          sensor={sensor}
+                          onPress={() => setSelectedPin(sensor.pin)}
+                          theme={theme}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {sensorDetails.length === 0 && (
+            <View style={[styles.panel, styles.emptyState]}>
+              <Ionicons name="radio-outline" size={28} color={theme.colors.textSoft} />
+              <Text style={styles.emptyText}>Waiting for ESP32 data...</Text>
+              <Text style={styles.emptySubtext}>Check MQTT at {ESP32_CONFIG.mqtt.broker}</Text>
+            </View>
+          )}
         </ScreenShell>
       </ScrollView>
 
@@ -735,17 +775,30 @@ export default function SensorsScreen() {
         onClose={() => setSelectedPin(null)}
         theme={theme}
       />
+
+      {/* Board pin detail modal */}
+      <PinDetailModal
+        pin={selectedBoardPin}
+        visible={!!selectedBoardPin}
+        onClose={() => setSelectedBoardPin(null)}
+        liveValue={selectedBoardPin ? getBoardPinLiveValue(selectedBoardPin) : undefined}
+        theme={theme}
+      />
     </SafeAreaView>
   );
 }
 
-const createStyles = (theme: AppTheme) => StyleSheet.create({
+const createStyles = (theme: AppTheme, screenWidth: number = 400) => {
+  const isCompact = screenWidth < 500;
+  const isWide = screenWidth >= 900;
+
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: theme.colors.background
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: isCompact ? 12 : 16,
     paddingTop: 16,
     paddingBottom: 120
   },
@@ -760,23 +813,23 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    gap: 0,
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    marginBottom: 14,
+    marginBottom: 12,
     ...theme.shadow.card
   },
   quickStatItem: {
+    flex: 1,
     alignItems: 'center',
-    gap: 4
+    gap: 1,
+    paddingVertical: 10,
   },
   quickStatValue: {
     fontFamily: theme.font.mono,
-    fontSize: 24,
+    fontSize: 22,
     color: theme.colors.text
   },
   quickStatLabel: {
@@ -786,7 +839,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   quickStatDivider: {
     width: 1,
-    height: 32,
+    height: 28,
     backgroundColor: theme.colors.border
   },
 
@@ -797,7 +850,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     marginBottom: 14,
     ...theme.shadow.card
   },
@@ -805,13 +858,64 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.font.bold,
     fontSize: 18,
     color: theme.colors.text,
-    marginBottom: 3
+    marginBottom: 10
   },
   panelCaption: {
     fontFamily: theme.font.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: theme.colors.textSoft,
-    marginBottom: 14
+    marginBottom: 12
+  },
+
+  /* ── Responsive sections container ── */
+  responsiveRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+    flexWrap: 'wrap',
+  },
+  responsiveRowItem: {
+    flex: 1,
+    minWidth: 260,
+  },
+  /* ── Utility row ── */
+  utilRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 0,
+  },
+  utilCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  utilCardPressed: {
+    opacity: 0.6,
+  },
+  utilIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surfaceMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  utilCardTitle: {
+    fontFamily: theme.font.semiBold,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  utilCardSub: {
+    fontFamily: theme.font.mono,
+    fontSize: 12,
+    color: theme.colors.textSoft,
   },
 
   /* ── I2C compact list ── */
@@ -821,10 +925,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   i2cRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingVertical: 12,
+    gap: 12,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border
+  },
+  i2cIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   i2cRowText: {
     flex: 1,
@@ -840,6 +951,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textSoft
   },
+  i2cAddrBadge: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   i2cAddr: {
     fontFamily: theme.font.mono,
     fontSize: 13,
@@ -849,7 +966,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   /* ── Category label ── */
   categoryLabel: {
     fontFamily: theme.font.semiBold,
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -861,20 +978,24 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   sensorsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12
+    gap: isCompact ? 10 : 14
   },
   sensorTile: {
-    flex: 1,
-    minWidth: 170,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.md,
+    flexGrow: 1,
+    flexShrink: 0,
+    minWidth: isCompact ? 140 : 200,
+    maxWidth: isWide ? 300 : undefined,
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: 14,
-    gap: 10
+    padding: isCompact ? 12 : 16,
+    gap: 10,
+    ...theme.shadow.card
   },
   sensorTilePressed: {
-    opacity: 0.65
+    opacity: 0.7,
+    transform: [{ scale: 0.98 }]
   },
   sensorTileRow: {
     flexDirection: 'row',
@@ -882,52 +1003,64 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     gap: 12
   },
   sensorTileIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center'
   },
   sensorTileMeta: {
     flex: 1,
-    gap: 2
+    gap: 4
   },
   sensorTileLabel: {
-    fontFamily: theme.font.semiBold,
-    fontSize: 15,
+    fontFamily: theme.font.bold,
+    fontSize: 14,
     color: theme.colors.text,
-    textTransform: 'uppercase'
+    textTransform: 'uppercase',
+    letterSpacing: 0.6
   },
   sensorTileType: {
     fontFamily: theme.font.medium,
     fontSize: 13,
-    color: theme.colors.textSoft
+    color: theme.colors.textSoft,
+    lineHeight: 18
   },
   sensorTileActiveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: theme.colors.success
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.success,
+    borderWidth: 2,
+    borderColor: theme.colors.success + '40'
   },
   sensorTileValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    marginTop: 4
   },
   sensorTileValue: {
     fontFamily: theme.font.mono,
-    fontSize: 22,
-    color: theme.colors.text
+    fontSize: 28,
+    fontWeight: '700',
+    color: theme.colors.text,
+    letterSpacing: -0.5
   },
   digitalStateText: {
-    fontFamily: theme.font.semiBold,
-    fontSize: 12,
-    color: theme.colors.textSoft
+    fontFamily: theme.font.bold,
+    fontSize: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: theme.colors.surfaceMuted,
+    color: theme.colors.textSoft,
+    overflow: 'hidden',
+    letterSpacing: 0.3
   },
   digitalStateTextHigh: {
+    backgroundColor: theme.colors.success + '20',
     color: theme.colors.success
   },
 
@@ -937,28 +1070,41 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginBottom: 14,
+    padding: isCompact ? 8 : 12,
+    marginBottom: 0,
+    overflow: 'hidden',
     ...theme.shadow.card
   },
   pinoutHeaderRow: {
-    marginBottom: 16,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border + '30',
   },
   pinoutTitleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 3,
+    gap: 10,
+  },
+  pinoutIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primary + '15',
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pinoutTitle: {
     fontFamily: theme.font.bold,
-    fontSize: 18,
+    fontSize: 16,
     color: theme.colors.text,
+    marginBottom: 0,
   },
   pinoutSubtitle: {
     fontFamily: theme.font.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: theme.colors.textSoft,
   },
 
@@ -966,19 +1112,23 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   boardContainer: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginBottom: 16,
+    marginBottom: 10,
+    gap: 0,
+    overflow: 'hidden',
   },
   boardSide: {
     flex: 1,
-    justifyContent: 'space-between',
+    gap: 0,
+    minWidth: 0,
   },
 
-  /* Pin label rows */
+  /* Pin label rows — compact, tappable */
   pinLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    height: 34,
+    gap: isCompact ? 2 : 4,
+    height: isCompact ? 30 : 34,
+    paddingHorizontal: isCompact ? 1 : 3,
   },
   pinLabelRowLeft: {
     justifyContent: 'flex-end',
@@ -986,117 +1136,191 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   pinLabelRowRight: {
     justifyContent: 'flex-start',
   },
+  pinLabelSelected: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 8,
+  },
+  pinLabelOffline: {
+    opacity: 0.45,
+  },
+  pinConnectorLine: {
+    width: isCompact ? 8 : 16,
+    height: 2,
+    borderRadius: 1,
+  },
   pinBadge: {
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 6,
+    borderRadius: 5,
+    paddingHorizontal: isCompact ? 3 : 5,
     paddingVertical: 3,
-    minWidth: 58,
+    minWidth: isCompact ? 38 : 48,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 3,
+    justifyContent: 'center',
+  },
+  pinColorDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   pinBadgeText: {
     fontFamily: theme.font.mono,
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: isCompact ? 8 : 10,
+    fontWeight: '600',
   },
   pinAltText: {
     fontFamily: theme.font.mono,
-    fontSize: 10,
-    color: theme.colors.muted,
-    minWidth: 56,
-  },
-  pinAltSpacer: {
-    minWidth: 56,
+    fontSize: 8,
+    color: theme.colors.textSoft,
   },
   pinFnText: {
-    fontFamily: theme.font.semiBold,
-    fontSize: 13,
-    color: theme.colors.text,
-    flex: 1,
+    fontFamily: theme.font.medium,
+    fontSize: isCompact ? 9 : 12,
+    color: theme.colors.textSoft,
+    flexShrink: 1,
   },
 
-  /* Central chip */
+  /* Central chip — compact, real ESP32 green */
   boardChip: {
-    width: 64,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    width: isCompact ? 80 : 120,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  chipBody: {
+    width: '100%',
+    height: isCompact ? 140 : 160,
+    backgroundColor: '#0a3a0a',
+    borderWidth: 2,
+    borderColor: '#2d6a2d',
     borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'stretch',
-    overflow: 'hidden',
-    marginHorizontal: 6,
+    paddingVertical: isCompact ? 8 : 12,
+    paddingHorizontal: isCompact ? 3 : 5,
+    gap: 3,
   },
   usbStub: {
-    position: 'absolute',
-    top: -1,
-    left: '50%',
-    marginLeft: -18,
-    width: 36,
+    width: isCompact ? 32 : 42,
     height: 14,
-    backgroundColor: theme.colors.border,
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4,
+    backgroundColor: '#1a5a1a',
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderColor: '#3d7a3d',
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1,
+    marginBottom: 2,
+  },
+  usbPort: {
+    width: 12,
+    height: 6,
+    backgroundColor: theme.colors.primary + '40',
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '60',
   },
   usbText: {
-    fontFamily: theme.font.mono,
+    fontFamily: theme.font.bold,
     fontSize: 6,
-    color: theme.colors.textSoft,
+    color: '#5ad85a',
     letterSpacing: 0.5,
   },
   chipPinCol: {
-    width: 12,
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 20,
+    gap: 3,
+    paddingVertical: 4,
+    marginHorizontal: 3,
+  },
+  chipPinWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
   },
   chipPinDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  chipPinPad: {
+    width: 7,
+    height: 7,
+    borderRadius: 1.5,
+    borderWidth: 1.2,
   },
   chipCenter: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+  },
+  chipLogoContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#1a5a1a',
+    borderWidth: 1,
+    borderColor: '#3d7a3d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 1,
   },
   chipMainLabel: {
     fontFamily: theme.font.bold,
-    fontSize: 10,
-    color: theme.colors.textSoft,
+    fontSize: 11,
+    color: '#5ad85a',
+    letterSpacing: 0.3,
   },
   chipSubLabel: {
     fontFamily: theme.font.mono,
     fontSize: 9,
-    color: theme.colors.muted,
+    color: '#3d8a3d',
+  },
+  chipDotPattern: {
+    marginTop: 6,
+    gap: 2,
+  },
+  chipDotRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  chipTinyDot: {
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: theme.colors.border,
   },
 
   /* Legend */
   pinoutLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.border,
+    gap: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border + '30',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 5,
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   legendLabel: {
     fontFamily: theme.font.medium,
-    fontSize: 13,
-    color: theme.colors.textSoft,
+    fontSize: 12,
+    color: theme.colors.text,
   },
 
   /* ── Empty state ── */
@@ -1121,9 +1345,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 36
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28
   },
   modalHandle: {
     alignSelf: 'center',
@@ -1131,13 +1355,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     height: 5,
     borderRadius: 3,
     backgroundColor: theme.colors.border,
-    marginBottom: 22
+    marginBottom: 20
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    marginBottom: 28
+    marginBottom: 24
   },
   modalIconWrap: {
     width: 48,
@@ -1151,18 +1375,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalTitle: {
     fontFamily: theme.font.bold,
-    fontSize: 22,
+    fontSize: 20,
     color: theme.colors.text
   },
   modalSubtitle: {
     fontFamily: theme.font.medium,
     fontSize: 14,
     color: theme.colors.textSoft,
-    marginTop: 3
+    marginTop: 4
   },
   modalCloseBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     backgroundColor: theme.colors.card,
     borderWidth: 1,
@@ -1171,14 +1395,33 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center'
   },
 
+  /* ── Pin detail badge ── */
+  pinDetailBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 10,
+  },
+  pinDetailBadgeText: {
+    fontFamily: theme.font.mono,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+
   /* ── Modal value card ── */
   modalValueCard: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: 20,
-    marginBottom: 18
+    padding: 18,
+    marginBottom: 16
   },
   modalValueLabel: {
     fontFamily: theme.font.medium,
@@ -1193,7 +1436,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalValueText: {
     fontFamily: theme.font.mono,
-    fontSize: 36,
+    fontSize: 32,
     color: theme.colors.text
   },
   modalStatusRow: {
@@ -1270,42 +1513,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.font.semiBold,
     fontSize: 16,
     color: theme.colors.text
-  },
-
-  /* ── Serial monitor button ── */
-  serialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 14,
-    ...theme.shadow.card
-  },
-  serialBtnPressed: {
-    opacity: 0.6
-  },
-  serialBtnText: {
-    fontFamily: theme.font.semiBold,
-    fontSize: 14,
-    color: theme.colors.textSoft
-  },
-  serialBtnBadge: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 8,
-    paddingVertical: 2
-  },
-  serialBtnBadgeText: {
-    fontFamily: theme.font.mono,
-    fontSize: 12,
-    color: theme.colors.textSoft
   },
 
   /* ── Serial monitor modal ── */
@@ -1400,3 +1607,4 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: '#8b949e'
   }
 });
+};
