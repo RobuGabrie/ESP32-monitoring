@@ -58,7 +58,8 @@ export interface ESP32Data {
   gravZ?: number;
 }
 
-export type ConnectionStatus = 'online' | 'offline';
+export type ConnectionStatus = 'online' | 'offline' | 'disconnected';
+export type MqttStatus = 'online' | 'offline';
 export type ModuleName = 'temperature' | 'light' | 'cpu' | 'current';
 export type TimeRangeKey = '60s' | '15m' | '1h' | '6h' | '24h' | '7d' | 'all';
 
@@ -133,7 +134,7 @@ interface StoreState {
   peakCurrent: number;
   moduleStates: ModuleStates;
   connectionStatus: ConnectionStatus;
-  mqttStatus: ConnectionStatus;
+  mqttStatus: MqttStatus;
   selectedRange: TimeRangeKey;
   themeMode: ThemeMode;
   ioLog: IOLogEntry[];
@@ -141,7 +142,7 @@ interface StoreState {
   lastCommandAck: CommandAck | null;
   pushReading: (data: ESP32Data, ts: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
-  setMqttStatus: (status: ConnectionStatus) => void;
+  setMqttStatus: (status: MqttStatus) => void;
   setModuleState: (module: ModuleName, enabled: boolean) => void;
   setModuleStates: (states: Partial<ModuleStates>) => void;
   setTimeRange: (range: TimeRangeKey) => void;
@@ -221,7 +222,7 @@ const baseData = (): StoreData => ({
   ioLog: [],
   wifiScanNetworks: null,
   lastCommandAck: null,
-  setMqttStatus: function (status: ConnectionStatus): void {
+  setMqttStatus: function (status: MqttStatus): void {
     throw new Error('Function not implemented.');
   }
 });
@@ -274,7 +275,7 @@ const actions = {
     }
     setData({ connectionStatus: status });
   },
-  setMqttStatus: (status: ConnectionStatus) => {
+  setMqttStatus: (status: MqttStatus) => {
     if (storeData.mqttStatus === status) {
       return;
     }

@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import mqtt, { MqttClient } from 'mqtt';
 import { Buffer } from 'buffer';
 import process from 'process';
@@ -11,6 +12,10 @@ import {
   IMU_WS_URL,
   MQTT_BROKER,
   MQTT_CMD_TOPIC,
+  MQTT_LOG_TOPIC,
+  MQTT_OFFLINE_BROKER,
+  MQTT_OFFLINE_PORT,
+  MQTT_PORT,
   MQTT_PASS,
   MQTT_RAW_TOPIC,
   MQTT_STATE_TOPIC,
@@ -23,6 +28,7 @@ import {
   USE_MOCK
 } from '@/constants/config';
 import { ESP32Data, IOLogEntry, ModuleName, TimeRangeKey, WifiScanNetwork, getStoreState, useStore } from '@/hooks/useStore';
+import { updateDebugInfo } from '@/lib/debugInfo';
 
 if (!globalThis.Buffer) {
   (globalThis as typeof globalThis & { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -581,12 +587,29 @@ const mockData = (t: number): ESP32Data => {
   };
 };
 
-const endpoints = [
+type TransportMode = 'online' | 'offline' | 'disconnected';
+
+type MqttEndpoint = {
+  protocol: 'ws' | 'wss' | 'mqtt';
+  port: number;
+  useAuth: boolean;
+  path?: string;
+};
+
+const cloudEndpoints: MqttEndpoint[] = [
   { protocol: MQTT_WS_PROTOCOL, port: MQTT_WS_PORT, useAuth: true },
   { protocol: MQTT_WS_PROTOCOL, port: MQTT_WS_PORT, useAuth: false },
-  { protocol: 'ws', port: 8083, useAuth: true },
+  { protocol: 'ws', port: 8083, useAuth: true, path: '/mqtt' },
   { protocol: 'ws', port: 8083, useAuth: false }
 ] as const;
+
+const offlineEndpoints: MqttEndpoint[] = [
+  { protocol: 'mqtt', port: MQTT_OFFLINE_PORT, useAuth: false },
+  { protocol: 'ws', port: 8083, useAuth: false, path: '/mqtt' }
+];
+
+const onlineTopics = [MQTT_TOPIC, MQTT_RAW_TOPIC, MQTT_STATE_TOPIC, MQTT_LOG_TOPIC];
+const offlineTopics = [MQTT_TOPIC, MQTT_RAW_TOPIC, MQTT_STATE_TOPIC, MQTT_LOG_TOPIC];
 
 let sharedClient: MqttClient | null = null;
 let sharedImuSocket: WebSocket | null = null;
@@ -594,7 +617,7 @@ let sharedReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let sharedImuReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let sharedStaleTimer: ReturnType<typeof setInterval> | null = null;
 let sharedMockTimer: ReturnType<typeof setInterval> | null = null;
-let sharedEndpointIndex = 0;
+let sharedEndpointIndexByMode: Record<'online' | 'offline', number> = { online: 0, offline: 0 };
 let sharedLastMessageAt = 0;
 let sharedLastRawTs = '';
 let sharedLastRawAtMs = 0;
@@ -606,6 +629,9 @@ let sharedImuFrames = 0;
 let sharedImuWindowStart = 0;
 let sharedLastImuStorePushAt = 0;
 let sharedImuReconnectAttempt = 0;
+let sharedPreferredMode: TransportMode = 'disconnected';
+let sharedNetInfoState: NetInfoState | null = null;
+let sharedNetInfoUnsubscribe: (() => void) | null = null;
 
 const rangeMsMap: Record<Exclude<TimeRangeKey, 'all'>, number> = {
   '60s': 60 * 1000,
@@ -624,7 +650,67 @@ const validHost = (value: string | undefined) => {
   return Boolean(trimmed && trimmed !== '--' && trimmed !== '0.0.0.0');
 };
 
+const isEspApReachableFromNetInfo = (state: NetInfoState | null) => {
+  if (!state?.isConnected) {
+    console.log('[NetInfo] Not connected, ESP AP unreachable');
+    return false;
+  }
+
+  const details = state.details && typeof state.details === 'object'
+    ? (state.details as Record<string, unknown>)
+    : null;
+
+  const ip = typeof details?.ipAddress === 'string' ? details.ipAddress : '';
+  const ssid = typeof details?.ssid === 'string' ? details.ssid : '';
+  
+  console.log('[NetInfo] Checking AP detection:', { ip, ssid, isConnected: state.isConnected, isInternetReachable: state.isInternetReachable });
+  
+  if (ip.startsWith('192.168.4.')) {
+    console.log('[NetInfo] ✅ Detected ESP AP via IP:', ip);
+    return true;
+  }
+
+  const ssidLower = ssid.toLowerCase();
+  const isEspSsid = ssidLower.includes('esp') || ssidLower.includes('sudo') || ssidLower.includes('hardandsoft');
+  if (isEspSsid) {
+    console.log('[NetInfo] ✅ Detected ESP AP via SSID:', ssid);
+    return true;
+  }
+  
+  console.log('[NetInfo] ❌ Not an ESP AP, checked IP and SSID');
+  return false;
+};
+
+const resolvePreferredMode = (state: NetInfoState | null): TransportMode => {
+  if (!state?.isConnected) {
+    console.log('[Transport] Mode: DISCONNECTED (no network connection)');
+    return 'disconnected';
+  }
+
+  if (state.isInternetReachable === true) {
+    console.log('[Transport] Mode: ONLINE (internet reachable)');
+    return 'online';
+  }
+
+  if (isEspApReachableFromNetInfo(state)) {
+    console.log('[Transport] Mode: OFFLINE (ESP AP detected)');
+    return 'offline';
+  }
+
+  console.log('[Transport] Mode: DISCONNECTED (no internet, no ESP AP)');
+  return 'disconnected';
+};
+
+const setDisconnectedStatus = () => {
+  getStoreState().setConnectionStatus('disconnected');
+  getStoreState().setMqttStatus('offline');
+};
+
 const resolveImuWebSocketUrl = () => {
+  if (sharedPreferredMode === 'offline') {
+    return `ws://${MQTT_OFFLINE_BROKER}:${IMU_WS_PORT}`;
+  }
+
   const explicit = IMU_WS_URL.trim();
   if (explicit) {
     return explicit;
@@ -659,6 +745,10 @@ const clearSharedImuReconnect = () => {
 };
 
 const scheduleSharedImuReconnect = () => {
+  if (sharedPreferredMode === 'disconnected') {
+    return;
+  }
+
   if (sharedImuReconnectTimer) {
     return;
   }
@@ -937,6 +1027,10 @@ const clearSharedReconnect = () => {
 };
 
 const scheduleSharedReconnect = () => {
+  if (sharedPreferredMode === 'disconnected') {
+    return;
+  }
+
   if (sharedReconnectTimer) {
     return;
   }
@@ -947,11 +1041,95 @@ const scheduleSharedReconnect = () => {
   }, 1500);
 };
 
+const stopRealtimeSockets = (disconnected = false) => {
+  clearSharedReconnect();
+  clearSharedImuReconnect();
+  closeSharedClient();
+  closeSharedImuSocket();
+  if (disconnected) {
+    setDisconnectedStatus();
+  }
+};
+
+const updateTransportFromNetInfo = (state: NetInfoState | null) => {
+  sharedNetInfoState = state;
+  const nextMode = resolvePreferredMode(state);
+  const modeChanged = nextMode !== sharedPreferredMode;
+
+  if (modeChanged) {
+    console.log(`[Transport] Mode change: ${sharedPreferredMode} → ${nextMode}`);
+  }
+
+  if (nextMode === sharedPreferredMode) {
+    if (nextMode === 'disconnected') {
+      setDisconnectedStatus();
+      stopRealtimeSockets();
+      return;
+    }
+
+    if (!sharedClient && !sharedReconnectTimer) {
+      connectSharedMQTT();
+    }
+
+    if (!sharedImuSocket && !sharedImuReconnectTimer) {
+      connectSharedImuSocket();
+    }
+    return;
+  }
+
+  sharedPreferredMode = nextMode;
+
+  // Update debug info
+  updateDebugInfo({
+    transportMode: nextMode,
+    netInfoState: state ? {
+      isConnected: state.isConnected ?? false,
+      isInternetReachable: state.isInternetReachable ?? false,
+      ipAddress: (state.details as any)?.ipAddress ?? 'N/A',
+      ssid: (state.details as any)?.ssid ?? 'N/A',
+    } : undefined,
+    mqttBroker: nextMode === 'offline' ? MQTT_OFFLINE_BROKER : MQTT_BROKER,
+    mqttPort: nextMode === 'offline' ? MQTT_OFFLINE_PORT : MQTT_PORT,
+  });
+
+  if (nextMode === 'disconnected') {
+    stopRealtimeSockets(true);
+    return;
+  }
+
+  stopRealtimeSockets();
+  getStoreState().setConnectionStatus('offline');
+  getStoreState().setMqttStatus('offline');
+  connectSharedMQTT();
+  connectSharedImuSocket();
+};
+
+const getCurrentMqttContext = () => {
+  const mode: 'online' | 'offline' = sharedPreferredMode === 'online' ? 'online' : 'offline';
+  const endpoints = mode === 'online' ? cloudEndpoints : offlineEndpoints;
+  const topics = mode === 'online' ? onlineTopics : offlineTopics;
+  const host = mode === 'online' ? MQTT_BROKER : MQTT_OFFLINE_BROKER;
+  const endpointIndex = sharedEndpointIndexByMode[mode] % endpoints.length;
+  const endpoint = endpoints[endpointIndex];
+
+  return { mode, endpoints, topics, host, endpoint, endpointIndex };
+};
+
 const connectSharedMQTT = () => {
+  if (sharedPreferredMode === 'disconnected') {
+    console.log('[MQTT] Skipping connection in disconnected mode');
+    return;
+  }
+
   closeSharedClient();
 
-  const endpoint = endpoints[sharedEndpointIndex % endpoints.length];
-  const url = `${endpoint.protocol}://${MQTT_BROKER}:${endpoint.port}/mqtt`;
+  const { mode, endpoints, topics, host, endpoint } = getCurrentMqttContext();
+  const url = endpoint.protocol === 'mqtt'
+    ? `${endpoint.protocol}://${host}:${endpoint.port}`
+    : `${endpoint.protocol}://${host}:${endpoint.port}${endpoint.path ?? '/mqtt'}`;
+
+  console.log(`[MQTT] Connecting (${mode} mode): ${url}`);
+  console.log(`[MQTT] Topics to subscribe: ${topics.join(', ')}`);
 
   const options = {
     clean: true,
@@ -968,7 +1146,8 @@ const connectSharedMQTT = () => {
   let handledDisconnect = false;
 
   const advanceEndpoint = () => {
-    sharedEndpointIndex = (sharedEndpointIndex + 1) % endpoints.length;
+    sharedEndpointIndexByMode[mode] = (sharedEndpointIndexByMode[mode] + 1) % endpoints.length;
+    return sharedEndpointIndexByMode[mode] === 0;
   };
 
   const handleDisconnect = (advance: boolean) => {
@@ -976,10 +1155,23 @@ const connectSharedMQTT = () => {
       return;
     }
     handledDisconnect = true;
+    let exhausted = false;
     if (advance) {
-      advanceEndpoint();
+      exhausted = advanceEndpoint();
     }
-    getStoreState().setConnectionStatus('offline');
+
+    // If cloud transport is unreachable but ESP AP is reachable, fall back to offline mode.
+    if (mode === 'online' && exhausted && isEspApReachableFromNetInfo(sharedNetInfoState)) {
+      sharedPreferredMode = 'offline';
+      stopRealtimeSockets();
+      getStoreState().setConnectionStatus('offline');
+      getStoreState().setMqttStatus('offline');
+      connectSharedMQTT();
+      connectSharedImuSocket();
+      return;
+    }
+
+    getStoreState().setConnectionStatus(sharedPreferredMode === 'disconnected' ? 'disconnected' : 'offline');
     getStoreState().setMqttStatus('offline');
     scheduleSharedReconnect();
   };
@@ -992,14 +1184,35 @@ const connectSharedMQTT = () => {
   });
 
   client.on('connect', () => {
+    console.log(`[MQTT] ✅ Connected in ${sharedPreferredMode} mode`);
     hasConnected = true;
     sharedLastMessageAt = Date.now();
     clearSharedReconnect();
     getStoreState().setConnectionStatus('online');
     getStoreState().setMqttStatus('online');
-    client.subscribe([MQTT_TOPIC, MQTT_RAW_TOPIC, MQTT_STATE_TOPIC], (err) => {
+    
+    // Update debug info on successful connection
+    const displayHost = sharedPreferredMode === 'offline' ? MQTT_OFFLINE_BROKER : MQTT_BROKER;
+    const displayPort = sharedPreferredMode === 'offline' ? MQTT_OFFLINE_PORT : MQTT_PORT;
+    updateDebugInfo({
+      transportMode: sharedPreferredMode as 'online' | 'offline' | 'disconnected',
+      netInfoState: sharedNetInfoState ? {
+        isConnected: sharedNetInfoState.isConnected ?? false,
+        isInternetReachable: sharedNetInfoState.isInternetReachable ?? false,
+        ipAddress: (sharedNetInfoState.details as any)?.ipAddress ?? 'N/A',
+        ssid: (sharedNetInfoState.details as any)?.ssid ?? 'N/A',
+      } : undefined,
+      mqttBroker: displayHost,
+      mqttPort: displayPort,
+    });
+    
+    console.log(`[MQTT] Subscribing to topics: ${topics.join(', ')}`);
+    client.subscribe(topics, (err) => {
       if (err) {
+        console.log('[MQTT] ❌ Subscription error:', err);
         handleDisconnect(true);
+      } else {
+        console.log('[MQTT] ✅ Subscribed to all topics');
       }
     });
   });
@@ -1052,6 +1265,28 @@ const connectSharedMQTT = () => {
           pcf8591Raw: raw.pcf8591Raw,
           ina219Raw: raw.ina219Raw,
           source: 'live'
+        });
+        return;
+      }
+
+      if (topic === MQTT_LOG_TOPIC) {
+        const now = Date.now();
+        const ts = extractTimestamp(parsed) ?? format(new Date(now), 'HH:mm:ss');
+        const rawText = typeof parsed?.line === 'string'
+          ? parsed.line
+          : typeof parsed?.msg === 'string'
+            ? parsed.msg
+            : JSON.stringify(parsed);
+
+        const snapshot = getStoreState().data;
+        getStoreState().addLog({
+          ts,
+          timeMs: now,
+          temp: snapshot?.temp ?? 0,
+          light: snapshot?.lightPercent ?? snapshot?.light ?? 0,
+          gpio: snapshot?.gpio ?? {},
+          source: 'live',
+          rawText: `LOG ${rawText}`
         });
         return;
       }
@@ -1127,10 +1362,28 @@ const connectSharedMQTT = () => {
     handleDisconnect(!hasConnected);
   });
 
-  client.on('error', () => {
+  client.on('error', (err) => {
+    console.log('[MQTT] ❌ Connection error:', err);
+    
+    // Update debug info on connection error
+    const displayHost = sharedPreferredMode === 'offline' ? MQTT_OFFLINE_BROKER : MQTT_BROKER;
+    const displayPort = sharedPreferredMode === 'offline' ? MQTT_OFFLINE_PORT : MQTT_PORT;
+    updateDebugInfo({
+      transportMode: sharedPreferredMode as 'online' | 'offline' | 'disconnected',
+      netInfoState: sharedNetInfoState ? {
+        isConnected: sharedNetInfoState.isConnected ?? false,
+        isInternetReachable: sharedNetInfoState.isInternetReachable ?? false,
+        ipAddress: (sharedNetInfoState.details as any)?.ipAddress ?? 'N/A',
+        ssid: (sharedNetInfoState.details as any)?.ssid ?? 'N/A',
+      } : undefined,
+      mqttBroker: displayHost,
+      mqttPort: displayPort,
+    });
+    
     handleDisconnect(true);
   });
 
+  console.log('[MQTT] Initiating connection...');
   client.connect();
 };
 
@@ -1156,10 +1409,29 @@ const ensureSharedConnection = () => {
   }
 
   void loadSupabaseHistory(getStoreState().selectedRange);
-  connectSharedMQTT();
-  connectSharedImuSocket();
+
+  if (!sharedNetInfoUnsubscribe) {
+    console.log('[NetInfo] Subscribing to network state changes...');
+    sharedNetInfoUnsubscribe = NetInfo.addEventListener((state) => {
+      console.log('[NetInfo] State changed:', state);
+      updateTransportFromNetInfo(state);
+    });
+  }
+
+  console.log('[NetInfo] Fetching initial state...');
+  void NetInfo.fetch().then((state) => {
+    console.log('[NetInfo] Initial fetch:', state);
+    updateTransportFromNetInfo(state);
+  }).catch((err) => {
+    console.log('[NetInfo] ❌ Fetch error:', err);
+  });
 
   sharedStaleTimer = setInterval(() => {
+    if (sharedPreferredMode === 'disconnected') {
+      setDisconnectedStatus();
+      return;
+    }
+
     const last = sharedLastMessageAt;
     if (!last) {
       return;
@@ -1167,14 +1439,9 @@ const ensureSharedConnection = () => {
 
     const staleMs = Date.now() - last;
     if (staleMs >= 5000) {
-      const ts = format(new Date(), 'HH:mm:ss.SSS');
       const socketConnected = Boolean(sharedClient?.connected);
       getStoreState().setConnectionStatus(socketConnected ? 'online' : 'offline');
-      // MQTT badge reflects actual data freshness, not just broker socket state.
-      // If no data for 5s, the ESP32 is not sending — mark MQTT as offline.
       getStoreState().setMqttStatus('offline');
-      getStoreState().pushReading(buildZeroReadingFromStore(), ts);
-      sharedLastMessageAt = Date.now();
     }
   }, 1000);
 };
@@ -1202,6 +1469,12 @@ export const useESP32 = () => {
   const totalCurrentMah = useStore((s) => s.totalCurrentMah);
   const peakCurrent = useStore((s) => s.peakCurrent);
   const moduleStates = useStore((s) => s.moduleStates);
+  const transportMode = useMemo<TransportMode>(() => {
+    if (status === 'disconnected') {
+      return 'disconnected';
+    }
+    return sharedPreferredMode === 'offline' ? 'offline' : 'online';
+  }, [status, mqttStatus]);
 
   useEffect(() => {
     ensureSharedConnection();
@@ -1282,6 +1555,9 @@ export const useESP32 = () => {
     history,
     status,
     mqttStatus,
+    transportMode,
+    activeMqttBroker: transportMode === 'offline' ? MQTT_OFFLINE_BROKER : MQTT_BROKER,
+    activeMqttPort: transportMode === 'offline' ? MQTT_OFFLINE_PORT : MQTT_PORT,
     ioLog: filteredLog,
     selectedRange,
     setTimeRange,

@@ -81,7 +81,7 @@ const getNiceMax = (value: number, step: number, floor: number) => {
 export default function OverviewScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { data, history, status, mqttStatus, moduleStates, totalCurrentMah, peakCurrent, selectedRange, setTimeRange } = useESP32();
+  const { data, history, status, mqttStatus, transportMode, moduleStates, totalCurrentMah, peakCurrent, selectedRange, setTimeRange } = useESP32();
   const { width } = useWindowDimensions();
   const [selectedCmd, setSelectedCmd] = useState<ModuleName | null>(null);
   const livePulse = useRef(new Animated.Value(1)).current;
@@ -201,7 +201,7 @@ export default function OverviewScreen() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
-  const offline = mqttStatus === 'offline';
+  const offline = mqttStatus === 'offline' || transportMode === 'disconnected';
   const rtcDate = parsePayloadTimestamp(data?.timestamp, data?.recordedAtMs);
   const rtcAgeSeconds = rtcDate ? Math.max(0, (Date.now() - rtcDate.getTime()) / 1000) : null;
   const rtcIsFresh = typeof rtcAgeSeconds === 'number' ? rtcAgeSeconds <= 90 : false;
@@ -325,7 +325,13 @@ export default function OverviewScreen() {
         <ScreenShell
           contentStyle={styles.pageShell}
           screenTitle="ESP32 Monitor"
-          screenSubtitle={status === 'offline' ? 'ESP32 deconectat · date vechi' : 'Telemetrie în timp real · SUDO'}
+          screenSubtitle={
+            transportMode === 'online'
+              ? 'Telemetrie cloud in timp real · SUDO'
+              : transportMode === 'offline'
+                ? 'Mod offline AP local · telemetrie live'
+                : 'Deconectat · afiseaza ultimele mostre'
+          }
           onExport={onExportPress}
           mqttStatus={mqttStatus}
           selectedRange={selectedRange}

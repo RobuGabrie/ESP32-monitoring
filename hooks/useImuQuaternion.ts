@@ -343,10 +343,8 @@ export function useImuQuaternion(initialWsUrl: string, options: Options = {}) {
   const lastFrameCounterRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (initialWsUrl && initialWsUrl !== activeUrl) {
-      setActiveUrl(initialWsUrl);
-    }
-  }, [initialWsUrl, activeUrl]);
+    setActiveUrl((prev) => (prev === initialWsUrl ? prev : initialWsUrl));
+  }, [initialWsUrl]);
 
   const pushEvent = useCallback((level: 'info' | 'warn' | 'error', message: string) => {
     const next = eventLogRef.current;

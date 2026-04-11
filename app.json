@@ -16,7 +16,12 @@
       "backgroundColor": "#F1F3F5"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "This app connects to your ESP32 device on your local network for live telemetry and control.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.gabrielrobu.esp32"
     },
     "android": {
       "adaptiveIcon": {

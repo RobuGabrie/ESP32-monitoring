@@ -57,7 +57,6 @@ function SensorCard({ label, icon, iconColor, isDisconnected, theme, children, s
 
   return (
     <View style={[s.card, style]}>
-      {!isDisconnected }
       <View style={s.header}>
         <View style={[s.iconWrap, { backgroundColor: isDisconnected ? 'transparent' : `${iconColor}15` }]}>
           <Ionicons name={icon} size={14} color={isDisconnected ? theme.colors.muted : iconColor} />
@@ -300,6 +299,28 @@ function PowerMeter({ watts, maxWatts, theme }: { watts: number; maxWatts: numbe
   );
 }
 
+function TimeSegments({ hour, theme }: { hour: number; theme: AppTheme }) {
+  const segments = 24;
+  const currentSegment = hour % 24;
+  const color = '#06b6d4'; // cyan for time
+  return (
+    <View style={{ flexDirection: 'row', gap: 2, marginTop: 10, flexWrap: 'wrap' }}>
+      {Array.from({ length: segments }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            width: 8,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor: i <= currentSegment ? color : theme.colors.surfaceMuted,
+            opacity: i <= currentSegment ? 0.4 + ((i + 1) / segments) * 0.6 : 0.2
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 // ─── Bento grid ──────────────────────────────────────────────────────────────
 
 export function BentoSensorsGrid({ data, isConnected }: Props) {
@@ -307,24 +328,37 @@ export function BentoSensorsGrid({ data, isConnected }: Props) {
   const { width } = useWindowDimensions();
   const { moduleStates, sendCpuStressCommand } = useESP32();
   const isDesktop = width >= 768;
+  const isCompactPhone = width < 380;
+  const mobileColumns = isCompactPhone ? 1 : 2;
 
   const gap = 10;
-  // On desktop, constrain to 920px max and center it
+  const mobileContentWidth = Math.max(0, width - theme.spacing.lg * 2);
+  const mobileColumnWidth = mobileColumns === 1
+    ? mobileContentWidth
+    : Math.max(0, (mobileContentWidth - gap) / mobileColumns);
 
-  const col = (fraction: number) => ({
-    flex: isDesktop ? fraction : 1,
-    flexBasis: isDesktop
-      ? undefined
-      : fraction >= 2
-        ? '100%'
-        : '48%',
-    maxWidth: isDesktop
-      ? undefined
-      : fraction >= 2
-        ? '100%'
-        : '48%',
-    minWidth: 0
-  });
+  const col = (fraction: number) => {
+    if (isDesktop) {
+      return {
+        flex: fraction,
+        minWidth: 0
+      };
+    }
+
+    const span = Math.min(fraction, mobileColumns);
+    const cardWidth = span === mobileColumns
+      ? mobileContentWidth
+      : mobileColumnWidth * span + gap * (span - 1);
+
+    return {
+      width: cardWidth,
+      flexBasis: cardWidth,
+      maxWidth: cardWidth,
+      flexGrow: 0,
+      flexShrink: 0,
+      minWidth: 0
+    };
+  };
 
   // Derived sensor values ────────────────────────────────────────────────────
   const offline = !isConnected || !data;
@@ -345,7 +379,54 @@ export function BentoSensorsGrid({ data, isConnected }: Props) {
   const noWifi = offline || !data?.ip || data.ip === '--';
   const noCpu = offline || cpu === 0;
   const noBattery = offline || (batteryPercent === 0 && volt === 0);
+  const noRtc = offline || (!data?.timestamp && !data?.recordedAtMs);
 
+  // Format timestamp for RTC card - use recordedAtMs for reliable date parsing
+  const formatTimestamp = (epochMs: number | undefined, fallbackTs: string | undefined) => {
+    if (!epochMs && !fallbackTs) return { date: '--', time: '--:--:--', hour: 0 };
+    
+    try {
+      let d: Date;
+      
+      // Prefer epoch milliseconds if available
+      if (epochMs && Number.isFinite(epochMs)) {
+        d = new Date(epochMs);
+      } 
+      // Fallback to timestamp string (might be HH:mm:ss or ISO)
+      else if (fallbackTs) {
+        // If it looks like time-only (HH:mm:ss), use today's date
+        if (/^\d{1,2}:\d{2}(:\d{2})?/.test(fallbackTs)) {
+          d = new Date();
+          const parts = fallbackTs.split(':');
+          d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), parseInt(parts[2] || '0', 10), 0);
+        } else {
+          d = new Date(fallbackTs);
+        }
+      } else {
+        return { date: '--', time: '--:--:--', hour: 0 };
+      }
+
+      // Validate date
+      if (isNaN(d.getTime())) {
+        return { date: '--', time: '--:--:--', hour: 0 };
+      }
+
+      const date = d.toLocaleDateString('ro-RO', { day: '2-digit', month: 'short', year: 'numeric' });
+      const time = d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const hour = d.getHours();
+      return { date, time, hour };
+    } catch {
+      return { date: '--', time: '--:--:--', hour: 0 };
+    }
+  };
+
+  const rtcTime = formatTimestamp(data?.recordedAtMs, data?.timestamp);
+  const uptimeFormatted = (uptime: number) => {
+    const hours = Math.floor(uptime / 3600);
+    const mins = Math.floor((uptime % 3600) / 60);
+    const secs = uptime % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
   const rssiQuality = (db: number) => {
     if (db >= -50) return 'Excelent';
     if (db >= -65) return 'Bun';
@@ -353,7 +434,10 @@ export function BentoSensorsGrid({ data, isConnected }: Props) {
     return 'Slab';
   };
 
-  const s = useMemo(() => createStyles(theme, gap, isDesktop), [theme, gap, isDesktop]);
+  const s = useMemo(
+    () => createStyles(theme, gap, isDesktop),
+    [theme, gap, isDesktop]
+  );
 
   return (
     <View style={[s.outerContainer, isDesktop && { alignSelf: 'center', width: '100%' }]}>
@@ -535,6 +619,38 @@ export function BentoSensorsGrid({ data, isConnected }: Props) {
             theme={theme}
           />
         </SensorCard>
+      </View>
+
+      {/* ─ Row 3: RTC Timestamp ───────────────────────────────────────── */}
+      <View style={s.row}>
+
+        {/* RTC Clock */}
+        <SensorCard
+          label="Ceas RTC"
+          icon="time-outline"
+          iconColor="#06b6d4"
+          isDisconnected={noRtc}
+          theme={theme}
+          style={col(isDesktop ? 2 : 1)}
+        >
+          <View style={{ flexDirection: 'column', gap: 4 }}>
+            <Text style={{ ...theme.type.cardValueLarge, fontSize: 28, color: theme.colors.text, fontFamily: theme.font.monoMedium }}>
+              {noRtc ? '--:--:--' : rtcTime.time}
+            </Text>
+            <Text style={{ ...theme.type.bodyMd, color: theme.colors.textSoft, fontFamily: theme.font.medium }}>
+              {noRtc ? '--' : rtcTime.date}
+            </Text>
+          </View>
+          <TimeSegments hour={noRtc ? 0 : rtcTime.hour} theme={theme} />
+          <MetaRow
+            items={[
+              { label: 'UPTIME', value: noRtc ? '--:--:--' : uptimeFormatted(data?.uptime ?? 0) },
+              { label: 'EPOCH', value: noRtc ? '--' : (data?.recordedAtMs ? `${Math.floor(data.recordedAtMs / 1000)}` : '--') }
+            ]}
+            theme={theme}
+          />
+        </SensorCard>
+
       </View>
 
     

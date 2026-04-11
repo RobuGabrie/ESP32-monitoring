@@ -25,6 +25,7 @@ import {
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
 import { showToast } from '@/lib/showToast';
+import { getDebugInfo } from '@/lib/debugInfo';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -331,6 +332,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function WifiCurrentSheet({ data, status, onClose }: { data: any; status: string; onClose: () => void }) {
   const { theme } = useAppTheme();
+  const statusLabel = status === 'online' ? '● Activ' : status === 'disconnected' ? 'Deconectat' : 'Offline';
+  const statusTone: BadgeTone = status === 'online' ? 'green' : 'red';
   return (
     <>
       <SheetTitle title="Status WiFi" subtitle="Conexiunea curentă a ESP32" />
@@ -343,7 +346,7 @@ function WifiCurrentSheet({ data, status, onClose }: { data: any; status: string
             <Text style={{ fontSize: 17, fontFamily: theme.font.bold, color: theme.colors.text }}>{data?.ssid ?? 'SUDO_AP'}</Text>
             <Text style={{ fontSize: 13, fontFamily: theme.font.mono, color: theme.colors.muted, marginTop: 3 }}>Soft Access Point Mode</Text>
           </View>
-          <Badge label={status === 'online' ? '● Activ' : 'Offline'} tone={status === 'online' ? 'green' : 'red'} />
+          <Badge label={statusLabel} tone={statusTone} />
         </View>
         <InfoRow label="IP" value={data?.ip ?? '--'} />
         <InfoRow label="Canal" value={`CH ${data?.channel ?? '--'}`} />
@@ -515,6 +518,9 @@ function DeviceInfoCard({ data, status }: { data: any; status: string }) {
     { label: 'CPU',        value: '160 MHz',                  color: theme.colors.text }
   ];
 
+  const statusLabel = status === 'online' ? '● ONLINE' : status === 'disconnected' ? '○ DECON.' : '○ OFFLINE';
+  const statusTone: BadgeTone = status === 'online' ? 'green' : 'red';
+
   return (
     <View style={{ backgroundColor: '#141f18', borderWidth: 1, borderColor: '#1e3328', borderRadius: theme.radius.lg, padding: 20, marginBottom: 8, overflow: 'hidden' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
@@ -522,7 +528,7 @@ function DeviceInfoCard({ data, status }: { data: any; status: string }) {
           <Text style={{ fontSize: 18, fontFamily: theme.font.bold, color: theme.colors.text }}>ESP32-C3 Super Mini</Text>
           <Text style={{ fontSize: 13, color: theme.colors.muted, marginTop: 3 }}>SUDO · v2.1.0</Text>
         </View>
-        <Badge label={status === 'online' ? '● ONLINE' : '○ OFFLINE'} tone={status === 'online' ? 'green' : 'red'} />
+        <Badge label={statusLabel} tone={statusTone} />
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
         {gridItems.map((item) => (
@@ -547,7 +553,25 @@ function DeviceInfoCard({ data, status }: { data: any; status: string }) {
 export default function SettingsScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { data, status, mqttStatus, publishCommand, sendModuleCommand, moduleStates, lastCommandAck } = useESP32();
+  const { data, status, mqttStatus, transportMode, activeMqttBroker, activeMqttPort, publishCommand, sendModuleCommand, moduleStates, lastCommandAck } = useESP32();
+  const [debugExpanded, setDebugExpanded] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(getDebugInfo());
+
+  // Refresh debug info periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDebugInfo(getDebugInfo());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const mqttBadgeLabel = mqttStatus === 'online'
+    ? transportMode === 'offline'
+      ? '● Local AP'
+      : '● Cloud'
+    : status === 'disconnected'
+      ? '● Deconectat'
+      : '● Offline';
 
   const [sheet, setSheet] = useState<SheetId>(null);
   const [softAp, setSoftAp] = useState(true);
@@ -706,8 +730,8 @@ export default function SettingsScreen() {
           <SettingRow
             icon={<IconBox color="rgba(167,139,250,0.12)"><Ionicons name="flash-outline" size={20} color="#a78bfa" /></IconBox>}
             label="Server MQTT"
-            value={`${MQTT_BROKER} : ${MQTT_PORT}`}
-            right={<><Badge label={mqttStatus === 'online' ? '● Activ' : '● Offline'} tone={mqttStatus === 'online' ? 'green' : 'red'} /><Chevron /></>}
+            value={`${activeMqttBroker} : ${activeMqttPort}`}
+            right={<><Badge label={mqttBadgeLabel} tone={mqttStatus === 'online' ? 'green' : 'red'} /><Chevron /></>}
             onPress={() => setSheet('mqtt')}
           />
           <SettingRow
@@ -812,6 +836,62 @@ export default function SettingsScreen() {
             }
             isLast
           />
+        </SettingGroup>
+
+        {/* ══ Debug Panel ══ */}
+        <SectionLabel title="Diagnostică" />
+        <SettingGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(99,102,241,0.12)"><Ionicons name="bug-outline" size={20} color="#6366f1" /></IconBox>}
+            label="Informații conexiune"
+            desc={`${debugInfo?.transportMode ?? 'necunoscut'} · ${debugInfo?.mqttBroker ?? '--'}:${debugInfo?.mqttPort ?? '--'}`}
+            right={<Chevron />}
+            onPress={() => setDebugExpanded(!debugExpanded)}
+            isLast={!debugExpanded}
+          />
+          {debugExpanded && (
+            <View style={{ paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+              <View style={{ backgroundColor: theme.colors.surfaceMuted, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, padding: 12, marginBottom: 12 }}>
+                <Text style={{ fontSize: 12, color: theme.colors.muted, fontFamily: theme.font.semiBold, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  Moduri
+                </Text>
+                <Text style={{ fontSize: 14, fontFamily: theme.font.mono, color: theme.colors.text, lineHeight: 20 }}>
+                  Transport: <Text style={{ color: debugInfo?.transportMode === 'online' ? theme.colors.success : debugInfo?.transportMode === 'offline' ? theme.colors.warning : theme.colors.muted, fontFamily: theme.font.bold }}>
+                    {debugInfo?.transportMode ?? 'necunoscut'}
+                  </Text>
+                  {'\n'}
+                  MQTT: <Text style={{ color: theme.colors.text, fontFamily: theme.font.bold }}>
+                    {`${debugInfo?.mqttBroker ?? '--'}:${debugInfo?.mqttPort ?? '--'}`}
+                  </Text>
+                </Text>
+              </View>
+
+              {debugInfo?.netInfoState && (
+                <View style={{ backgroundColor: theme.colors.surfaceMuted, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, padding: 12 }}>
+                  <Text style={{ fontSize: 12, color: theme.colors.muted, fontFamily: theme.font.semiBold, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                    Stare Rețea (NetInfo)
+                  </Text>
+                  <Text style={{ fontSize: 13, fontFamily: theme.font.mono, color: theme.colors.text, lineHeight: 18 }}>
+                    Conectat: <Text style={{ color: debugInfo.netInfoState.isConnected ? theme.colors.success : theme.colors.danger, fontFamily: theme.font.bold }}>
+                      {debugInfo.netInfoState.isConnected ? '✓' : '✗'}
+                    </Text>
+                    {'\n'}
+                    Internet: <Text style={{ color: debugInfo.netInfoState.isInternetReachable ? theme.colors.success : theme.colors.muted, fontFamily: theme.font.bold }}>
+                      {debugInfo.netInfoState.isInternetReachable ? '✓' : '✗'}
+                    </Text>
+                    {'\n'}
+                    IP: <Text style={{ color: theme.colors.text, fontFamily: theme.font.bold }}>
+                      {debugInfo.netInfoState.ipAddress}
+                    </Text>
+                    {'\n'}
+                    SSID: <Text style={{ color: theme.colors.text, fontFamily: theme.font.bold }}>
+                      {debugInfo.netInfoState.ssid || 'N/A'}
+                    </Text>
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </SettingGroup>
 
         {/* ══ Danger Zone ══ */}
