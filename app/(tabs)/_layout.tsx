@@ -48,7 +48,12 @@ function Sidebar() {
         return (
           <Pressable
             key={item.route}
-            onPress={() => router.push(item.route as '/')}
+            onPress={() => {
+              if (active) {
+                return;
+              }
+              router.push(item.route as '/');
+            }}
             style={{
               width: 40,
               height: 40,
@@ -82,7 +87,12 @@ function Sidebar() {
         return (
           <Pressable
             key={item.route}
-            onPress={() => router.push(item.route as '/')}
+            onPress={() => {
+              if (active) {
+                return;
+              }
+              router.push(item.route as '/');
+            }}
             style={{
               width: 40,
               height: 40,
@@ -122,16 +132,22 @@ export default function TabsLayout() {
             tabBarStyle: isDesktop
               ? { display: 'none' }
               : {
-                  height: 76,
+                  height: 52,
                   borderTopWidth: 1,
                   borderTopColor: theme.colors.border,
                   backgroundColor: themeMode === 'dark' ? 'rgba(20,20,20,0.95)' : 'rgba(247,236,222,0.96)',
-                  paddingBottom: 24,
-                  paddingTop: 12
+                  paddingBottom: 4,
+                  paddingTop: 4
                 },
+            tabBarItemStyle: {
+              paddingVertical: 0,
+              marginVertical: -1
+            },
             tabBarLabelStyle: {
               fontFamily: theme.font.medium,
-              fontSize: 10
+              fontSize: 10,
+              marginTop: 0,
+              marginBottom: 0
             },
             sceneStyle: {
               backgroundColor: theme.colors.background
@@ -160,12 +176,24 @@ export default function TabsLayout() {
             }}
           />
           <Tabs.Screen
+            name="connect"
+            options={{ href: null }}
+          />
+          <Tabs.Screen
+            name="telemetrie"
+            options={{
+              title: 'Telemetrie',
+              tabBarIcon: ({ color }) => <Ionicons name="pulse-outline" size={22} color={color} />
+            }}
+          />
+          <Tabs.Screen
             name="settings"
             options={{
               title: 'Settings',
               tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={22} color={color} />
             }}
           />
+          <Tabs.Screen name="safety" options={{ href: null }} />
         </Tabs>
       </View>
     </View>

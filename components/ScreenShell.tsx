@@ -313,6 +313,8 @@ export function ScreenShell({ children, style, contentStyle, screenTitle, screen
 
   return (
     <View style={[styles.shell, style]}>
+      <View pointerEvents="none" style={styles.backdropTopLeft} />
+      <View pointerEvents="none" style={styles.backdropBottomRight} />
       {screenTitle && (
         <HeaderBar
           title={screenTitle}
@@ -334,13 +336,36 @@ export function ScreenShell({ children, style, contentStyle, screenTitle, screen
 
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   shell: {
+    flex: 1,
     width: '100%',
-    gap: theme.spacing.md
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.background,
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  backdropTopLeft: {
+    position: 'absolute',
+    top: -120,
+    left: -100,
+    width: 220,
+    height: 220,
+    borderRadius: 220,
+    backgroundColor: 'rgba(242,106,45,0.08)'
+  },
+  backdropBottomRight: {
+    position: 'absolute',
+    right: -110,
+    bottom: -140,
+    width: 280,
+    height: 280,
+    borderRadius: 280,
+    backgroundColor: 'rgba(15,142,207,0.06)'
   },
   content: {
+    flex: 1,
     width: '100%',
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.md
+    paddingBottom: Platform.OS === 'web' ? theme.spacing.lg : 88
   }
 });

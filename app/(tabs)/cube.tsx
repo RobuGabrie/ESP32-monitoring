@@ -138,7 +138,7 @@ export default function CubeScreen() {
   }, [isFocused, rawFrameRef]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screenBgLayer} />
       <View style={styles.stage}>
         {isFocused && IMUCubeComponent ? (

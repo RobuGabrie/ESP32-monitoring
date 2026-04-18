@@ -40,6 +40,7 @@ export interface ESP32Data {
   roll?: number;
   pitch?: number;
   yaw?: number;
+  imuSeq?: number;
   quaternionNorm?: number;
   imuRateHz?: number;
   imuMode?: string;
@@ -218,7 +219,7 @@ const baseData = (): StoreData => ({
   connectionStatus: 'offline',
   mqttStatus: 'offline',
   selectedRange: '60s',
-  themeMode: 'dark',
+  themeMode: 'light',
   ioLog: [],
   wifiScanNetworks: null,
   lastCommandAck: null,

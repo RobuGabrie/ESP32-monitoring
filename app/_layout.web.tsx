@@ -1,4 +1,3 @@
-import 'react-native-get-random-values';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
@@ -8,10 +7,9 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+export default function WebRootLayout() {
   const [loaded] = useFonts({
     DMSans_400Regular,
     DMSans_500Medium,
@@ -36,6 +34,9 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="history" />
+          <Stack.Screen name="web/dashboard" />
+          <Stack.Screen name="web/analytics" />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

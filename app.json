@@ -1,14 +1,15 @@
 {
   "expo": {
-    "name": "ESP32 Monitor",
+    "name": "Skydiver Monitor",
     "slug": "esp32",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "esp32monitor",
+    "scheme": "skydivermonitor",
     "userInterfaceStyle": "light",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-asset"
     ],
     "splash": {
       "image": "./assets/splash.png",
@@ -19,16 +20,26 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "This app connects to your ESP32 device on your local network for live telemetry and control.",
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to your wearable device for real-time health monitoring.",
+        "NSBluetoothPeripheralUsageDescription": "This app connects to Bluetooth peripherals for wearable device communication.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.gabrielrobu.esp32"
+      "bundleIdentifier": "com.gabrielrobu.skydiver"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F1F3F5"
       },
-      "package": "com.gabrielrobu.esp32"
+      "package": "com.gabrielrobu.skydiver",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "experiments": {
       "typedRoutes": true

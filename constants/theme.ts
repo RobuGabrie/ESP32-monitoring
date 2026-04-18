@@ -7,10 +7,10 @@ const sharedTheme = {
     xl: 24
   },
   radius: {
-    sm: 10,
-    md: 14,
-    lg: 18,
-    xl: 22
+    sm: 12,
+    md: 18,
+    lg: 24,
+    xl: 30
   },
   font: {
     regular: 'DMSans_400Regular',
@@ -91,10 +91,12 @@ export const darkTheme = {
   colors: {
     background: '#111111',
     card: '#1a1a1a',
+    surface: '#202020',
     surfaceMuted: '#202020',
     surfaceAlt: '#202020',
     surfaceRaised: '#202020',
     primary: '#e8542a',
+    secondary: '#38BDF8',
     primaryLight: '#ff6b3d',
     muted: '#555555',
     textSoft: '#888888',
@@ -102,6 +104,7 @@ export const darkTheme = {
     border: '#2a2a2a',
     success: '#3ddc84',
     warning: '#F59E0B',
+    error: '#e84040',
     danger: '#e84040',
     info: '#38BDF8',
     logBg: '#111111'
@@ -133,48 +136,51 @@ export const darkTheme = {
 export const lightTheme = {
   ...sharedTheme,
   colors: {
-    background: '#efe4d6',
-    card: '#f7ecde',
-    surfaceMuted: '#e9dbc9',
-    surfaceAlt: '#fff6ea',
-    surfaceRaised: '#fffdf8',
-    primary: '#e8542a',
-    primaryLight: '#ff6b3d',
-    muted: '#7d6f61',
-    textSoft: '#5f5247',
-    text: '#231b15',
-    border: '#ccb8a2',
-    success: '#16a34a',
-    warning: '#d97706',
-    danger: '#dc2626',
-    info: '#0284c7',
-    logBg: '#f7ecde'
+    background: '#f4ece3',
+    card: '#fff8f0',
+    surface: '#fdf4e9',
+    surfaceMuted: '#f1e2d2',
+    surfaceAlt: '#fffaf5',
+    surfaceRaised: '#ffffff',
+    primary: '#f26a2d',
+    secondary: '#0f8ecf',
+    primaryLight: '#ff8a4c',
+    muted: '#8b7664',
+    textSoft: '#6b5a4c',
+    text: '#211813',
+    border: '#e4d3c1',
+    success: '#1f9d55',
+    warning: '#e08a1e',
+    error: '#de5343',
+    danger: '#de5343',
+    info: '#0f8ecf',
+    logBg: '#fff8f0'
   },
   accents: {
-    primary: 'rgba(232,84,42,0.12)',
-    success: 'rgba(22,163,74,0.12)',
-    warning: 'rgba(217,119,6,0.12)',
-    neutral: '#e9dbc9'
+    primary: 'rgba(242,106,45,0.12)',
+    success: 'rgba(31,157,85,0.12)',
+    warning: 'rgba(224,138,30,0.12)',
+    neutral: '#efe2d2'
   },
   shadow: {
     card: {
-      shadowColor: '#111827',
+      shadowColor: '#6d4a2f',
       shadowOpacity: 0.08,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 3
     },
     floating: {
-      shadowColor: '#111827',
-      shadowOpacity: 0.12,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 6
+      shadowColor: '#6d4a2f',
+      shadowOpacity: 0.14,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 7
     }
   }
 } as const;
 
-export const theme = darkTheme;
+export const theme = lightTheme;
 
 export type ThemeMode = 'light' | 'dark';
 

@@ -608,7 +608,7 @@ export default function SensorsScreen() {
   }, [sensorDetails]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <ScreenShell
           contentStyle={styles.pageShell}
