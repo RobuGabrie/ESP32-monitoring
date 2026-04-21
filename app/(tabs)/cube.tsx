@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 
-import { IMU_WS_PORT, IMU_WS_URL } from '@/constants/config';
 import { AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useImuQuaternion } from '@/hooks/useImuQuaternion';
@@ -52,7 +51,7 @@ export default function CubeScreen() {
   const deviceIp = useStore((s) => s.data?.ip);
   const appConnectionStatus = useStore((s) => s.connectionStatus);
 
-  const wsUrl = deviceIp && deviceIp !== '--' ? `ws://${deviceIp}:${IMU_WS_PORT}` : IMU_WS_URL;
+  const wsUrl = deviceIp && deviceIp !== '--' ? `ws://${deviceIp}:8000/imu` : '';
   const activeWsUrl = isFocused ? wsUrl : '';
 
   const {

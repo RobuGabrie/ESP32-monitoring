@@ -49,6 +49,13 @@ export interface DiveSessionState {
   sessionId: string | null;
 }
 
+export interface StartupConnectionState {
+  checkingRememberedDevice: boolean;
+  hasRememberedDevice: boolean;
+  isAutoReconnectRunning: boolean;
+  hasTriedAutoReconnect: boolean;
+}
+
 // Platform-specific service selector
 const getDataService = () => {
   return Platform.OS === 'web' ? webDataService : mobileDataService;
@@ -89,12 +96,17 @@ export const useConnectivity = () => {
     isActive: false,
     sessionId: null,
   });
-
-  const service = getDataService();
+  const [startupConnectionState, setStartupConnectionState] = useState<StartupConnectionState>({
+    checkingRememberedDevice: Platform.OS !== 'web',
+    hasRememberedDevice: false,
+    isAutoReconnectRunning: false,
+    hasTriedAutoReconnect: false,
+  });
 
   // Initialize connectivity monitoring
   useEffect(() => {
     const updateConnectivity = () => {
+      const service = getDataService();
       const mqttStatus = service.getMqttStatus();
       const connectionStatus = Platform.OS === 'web'
         ? (mqttStatus === 'online' ? 'online' : 'offline')
@@ -130,7 +142,7 @@ export const useConnectivity = () => {
     const interval = setInterval(updateConnectivity, 5000);
 
     return () => clearInterval(interval);
-  }, [service]);
+  }, []);
 
   // Set up data listeners
   useEffect(() => {
@@ -175,14 +187,46 @@ export const useConnectivity = () => {
     } else {
       // Mobile: Set up BLE data listeners
       const unsubscribeData = mobileDataService.onDataReceived((data: UnifiedSensorData) => {
-        setCurrentData(data);
-        setConnectivityState(prev => ({
-          ...prev,
-          lastDataReceived: new Date(),
-          hasReceivedData: true,
-          dataStreamStatus: 'live',
-          lastDataSource: 'ble',
-        }));
+        const packetTime =
+          typeof data.recordedAtMs === 'number' && Number.isFinite(data.recordedAtMs)
+            ? data.recordedAtMs
+            : Date.now();
+
+        setCurrentData((prev) => {
+          if (!prev) {
+            return data;
+          }
+
+          const prevPacketTime =
+            typeof prev.recordedAtMs === 'number' && Number.isFinite(prev.recordedAtMs)
+              ? prev.recordedAtMs
+              : Date.parse(prev.timestamp);
+
+          // Avoid re-render loops when the same packet is emitted more than once.
+          if (Number.isFinite(prevPacketTime) && prevPacketTime === packetTime) {
+            return prev;
+          }
+
+          return data;
+        });
+
+        setConnectivityState((prev) => {
+          if (
+            prev.lastDataSource === 'ble' &&
+            prev.dataStreamStatus === 'live' &&
+            prev.lastDataReceived?.getTime() === packetTime
+          ) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            lastDataReceived: new Date(packetTime),
+            hasReceivedData: true,
+            dataStreamStatus: 'live',
+            lastDataSource: 'ble',
+          };
+        });
       });
 
       const unsubscribeConnection = mobileDataService.onConnectionChange((status: ConnectionStatus) => {
@@ -227,6 +271,92 @@ export const useConnectivity = () => {
     }).catch(() => {
       if (!mounted) return;
       setDiveSessionState({ isActive: false, sessionId: null });
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      setStartupConnectionState({
+        checkingRememberedDevice: false,
+        hasRememberedDevice: false,
+        isAutoReconnectRunning: false,
+        hasTriedAutoReconnect: true,
+      });
+      return;
+    }
+
+    let mounted = true;
+
+    const runStartupReconnect = async () => {
+      const hasRememberedDevice = await mobileDataService.hasRememberedDevice();
+
+      if (!mounted) {
+        return;
+      }
+
+      setStartupConnectionState((prev) => ({
+        ...prev,
+        checkingRememberedDevice: false,
+        hasRememberedDevice,
+      }));
+
+      if (!hasRememberedDevice || connectivityState.connectionStatus === 'online') {
+        setStartupConnectionState((prev) => ({
+          ...prev,
+          isAutoReconnectRunning: false,
+          hasTriedAutoReconnect: true,
+        }));
+        return;
+      }
+
+      setStartupConnectionState((prev) => ({
+        ...prev,
+        isAutoReconnectRunning: true,
+      }));
+
+      await mobileDataService.autoReconnectRememberedDevice();
+
+      if (!mounted) {
+        return;
+      }
+
+      const info = mobileDataService.getConnectedDeviceInfo();
+      const nextConnectionStatus = mobileDataService.getConnectionStatus();
+
+      setConnectivityState((prev) => ({
+        ...prev,
+        connectionStatus: nextConnectionStatus,
+        isOnline: nextConnectionStatus === 'online',
+        connectedAt: nextConnectionStatus === 'online' ? (prev.connectedAt ?? new Date()) : null,
+        dataStreamStatus: nextConnectionStatus === 'online'
+          ? (prev.lastDataReceived ? 'live' : 'waiting')
+          : 'idle',
+        deviceId: info.id ?? undefined,
+        deviceName: info.name ?? prev.deviceName,
+      }));
+
+      setStartupConnectionState((prev) => ({
+        ...prev,
+        isAutoReconnectRunning: false,
+        hasTriedAutoReconnect: true,
+      }));
+    };
+
+    runStartupReconnect().catch(() => {
+      if (!mounted) {
+        return;
+      }
+
+      setStartupConnectionState((prev) => ({
+        ...prev,
+        checkingRememberedDevice: false,
+        isAutoReconnectRunning: false,
+        hasTriedAutoReconnect: true,
+      }));
     });
 
     return () => {
@@ -293,6 +423,30 @@ export const useConnectivity = () => {
     } else {
       return await mobileDataService.scanForDevices(options);
     }
+  }, []);
+
+  const connectRememberedOrScan = useCallback(async (options?: ScanDevicesOptions) => {
+    if (Platform.OS === 'web') {
+      return false;
+    }
+
+    const success = await mobileDataService.connectRememberedOrScan(options);
+    const info = mobileDataService.getConnectedDeviceInfo();
+    const status = mobileDataService.getConnectionStatus();
+
+    setConnectivityState((prev) => ({
+      ...prev,
+      connectionStatus: status,
+      isOnline: status === 'online',
+      connectedAt: status === 'online' ? (prev.connectedAt ?? new Date()) : null,
+      dataStreamStatus: status === 'online'
+        ? (prev.lastDataReceived ? 'live' : 'waiting')
+        : 'idle',
+      deviceId: info.id ?? undefined,
+      deviceName: info.name ?? prev.deviceName,
+    }));
+
+    return success;
   }, []);
 
   const getAnalytics = useCallback(async (sessionId?: string) => {
@@ -374,6 +528,8 @@ export const useConnectivity = () => {
     getHistoricalData,
     startDiveSession,
     stopDiveSession,
+    connectRememberedOrScan,
+    startupConnectionState,
 
     // Platform info
     isWeb: Platform.OS === 'web',

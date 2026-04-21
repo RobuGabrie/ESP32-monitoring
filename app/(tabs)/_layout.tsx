@@ -193,7 +193,6 @@ export default function TabsLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={22} color={color} />
             }}
           />
-          <Tabs.Screen name="safety" options={{ href: null }} />
         </Tabs>
       </View>
     </View>

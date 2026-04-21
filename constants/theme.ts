@@ -136,45 +136,45 @@ export const darkTheme = {
 export const lightTheme = {
   ...sharedTheme,
   colors: {
-    background: '#f4ece3',
-    card: '#fff8f0',
-    surface: '#fdf4e9',
-    surfaceMuted: '#f1e2d2',
-    surfaceAlt: '#fffaf5',
+    background: '#EDEEF2',
+    card: '#FFFFFF',
+    surface: '#F2F3F7',
+    surfaceMuted: '#E6E9F0',
+    surfaceAlt: '#F8FAFC',
     surfaceRaised: '#ffffff',
-    primary: '#f26a2d',
-    secondary: '#0f8ecf',
-    primaryLight: '#ff8a4c',
-    muted: '#8b7664',
-    textSoft: '#6b5a4c',
-    text: '#211813',
-    border: '#e4d3c1',
-    success: '#1f9d55',
-    warning: '#e08a1e',
-    error: '#de5343',
-    danger: '#de5343',
-    info: '#0f8ecf',
-    logBg: '#fff8f0'
+    primary: '#2FCFB4',
+    secondary: '#171717',
+    primaryLight: '#69DFCC',
+    muted: '#9DA3B4',
+    textSoft: '#6C7386',
+    text: '#171717',
+    border: '#DFE3EC',
+    success: '#2FCFB4',
+    warning: '#FFB547',
+    error: '#FF5D7C',
+    danger: '#FF5D7C',
+    info: '#38BDF8',
+    logBg: '#FFFFFF'
   },
   accents: {
-    primary: 'rgba(242,106,45,0.12)',
-    success: 'rgba(31,157,85,0.12)',
-    warning: 'rgba(224,138,30,0.12)',
-    neutral: '#efe2d2'
+    primary: 'rgba(47,207,180,0.12)',
+    success: 'rgba(47,207,180,0.12)',
+    warning: 'rgba(255,181,71,0.14)',
+    neutral: '#EEF1F7'
   },
   shadow: {
     card: {
-      shadowColor: '#6d4a2f',
+      shadowColor: '#0B1020',
       shadowOpacity: 0.08,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 3 },
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 5 },
       elevation: 3
     },
     floating: {
-      shadowColor: '#6d4a2f',
+      shadowColor: '#0B1020',
       shadowOpacity: 0.14,
-      shadowRadius: 20,
-      shadowOffset: { width: 0, height: 10 },
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 12 },
       elevation: 7
     }
   }

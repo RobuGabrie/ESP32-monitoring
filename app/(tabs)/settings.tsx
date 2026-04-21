@@ -13,18 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { AppTheme } from '@/constants/theme';
-import {
-  MQTT_BROKER,
-  MQTT_PORT,
-  MQTT_TOPIC,
-  MQTT_CMD_TOPIC,
-  MQTT_STATE_TOPIC
-} from '@/constants/config';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useESP32 } from '@/hooks/useESP32';
-import { showToast } from '@/lib/showToast';
 import { getDebugInfo } from '@/lib/debugInfo';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -390,7 +383,7 @@ function WifiCredsSheet({ data, onClose, onSave }: { data: any; onClose: () => v
       const msg = reconnect 
         ? 'Credențiale salvate. ESP32 se reconectează...' 
         : 'Credențiale salvate în ESP32.';
-      showToast(msg, 'LONG');
+   
       onClose();
     } else {
       Alert.alert('MQTT indisponibil', 'Nu se poate trimite comanda. Verificați conexiunea MQTT.');
@@ -414,64 +407,6 @@ function WifiCredsSheet({ data, onClose, onSave }: { data: any; onClose: () => v
       </SheetField>
       <SheetButton label="Salvează & Reconectează" variant="primary" onPress={() => handleSave(true)} />
       <SheetButton label="Doar salvează" variant="secondary" onPress={() => handleSave(false)} />
-      <SheetButton label="Anulează" variant="secondary" onPress={onClose} />
-    </>
-  );
-}
-
-function MqttSheet({ onClose, onSave }: { onClose: () => void; onSave: (payload: {
-  host: string;
-  port: number;
-  user: string;
-  pass: string;
-}) => boolean; }) {
-  const [host, setHost] = useState<string>(MQTT_BROKER);
-  const [port, setPort] = useState<string>(String(MQTT_PORT));
-  const [user, setUser] = useState<string>('emqx');
-  const [pass, setPass] = useState<string>('');
-
-  const handleSave = () => {
-    if (!host.trim() || !port.trim()) {
-      Alert.alert('Eroare', 'Completați adresa și portul MQTT');
-      return;
-    }
-    const parsedPort = Number(port);
-    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
-      Alert.alert('Eroare', 'Port invalid');
-      return;
-    }
-
-    const ok = onSave({
-      host: host.trim(),
-      port: Math.round(parsedPort),
-      user: user.trim(),
-      pass
-    });
-
-    if (ok) {
-      showToast(`Config MQTT trimisă: ${host}:${port}`, 'LONG');
-      onClose();
-    } else {
-      Alert.alert('MQTT indisponibil', 'Nu se poate trimite comanda. Verificați conexiunea MQTT.');
-    }
-  };
-
-  return (
-    <>
-      <SheetTitle title="Configurare MQTT" subtitle="Broker-ul la care se conectează ESP32" />
-      <SheetField label="Adresă broker">
-        <SheetInput value={host} onChangeText={setHost} placeholder="ex: 192.168.4.1" />
-      </SheetField>
-      <SheetField label="Port">
-        <SheetInput value={port} onChangeText={setPort} placeholder="1883" />
-      </SheetField>
-      <SheetField label="Utilizator">
-        <SheetInput value={user} onChangeText={setUser} placeholder="emqx" />
-      </SheetField>
-      <SheetField label="Parolă">
-        <SheetInput value={pass} onChangeText={setPass} secureTextEntry placeholder="••••••" />
-      </SheetField>
-      <SheetButton label="Salvează" variant="primary" onPress={handleSave} />
       <SheetButton label="Anulează" variant="secondary" onPress={onClose} />
     </>
   );
@@ -553,6 +488,7 @@ function DeviceInfoCard({ data, status }: { data: any; status: string }) {
 export default function SettingsScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const router = useRouter();
   const { data, status, mqttStatus, transportMode, activeMqttBroker, activeMqttPort, publishCommand, sendModuleCommand, moduleStates, lastCommandAck } = useESP32();
   const [debugExpanded, setDebugExpanded] = useState(false);
   const [debugInfo, setDebugInfo] = useState(getDebugInfo());
@@ -617,7 +553,7 @@ export default function SettingsScreen() {
     const text = isSuccess
       ? `ACK ${action}: ${lastCommandAck.message ?? 'OK'}`
       : `ACK ${action}: ${lastCommandAck.message ?? 'Eroare'}`;
-    showToast(text, 'SHORT');
+
 
     setPendingCommands((prev) => {
       const next = { ...prev };
@@ -637,7 +573,7 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: () => {
             const ok = publishSpecCommand('system.restart');
-            showToast(ok ? 'Comandă restart trimisă.' : 'MQTT indisponibil. Restart netrimis.', 'LONG');
+
           }
         }
       ]
@@ -658,7 +594,7 @@ export default function SettingsScreen() {
               erase_nvs: true,
               reboot: true
             });
-            showToast(ok ? 'Comandă factory reset trimisă.' : 'MQTT indisponibil. Factory reset netrimis.', 'LONG');
+           
             // Reset UI state
             setSoftAp(true);
             setMqttAutoReconnect(true);
@@ -684,6 +620,25 @@ export default function SettingsScreen() {
 
         {/* ── Device Info Card ── */}
         <DeviceInfoCard data={data} status={status} />
+
+        <SectionLabel title="Dispozitiv & Test" />
+        <SettingGroup>
+          <SettingRow
+            icon={<IconBox color="rgba(56,189,248,0.12)"><Ionicons name="bluetooth-outline" size={20} color={theme.colors.info} /></IconBox>}
+            label="Pairing & Diagnostic BLE"
+            desc="Conectează sau deconectează brățara"
+            right={<Chevron />}
+            onPress={() => router.push('/connect')}
+          />
+          <SettingRow
+            icon={<IconBox color="rgba(245,158,11,0.12)"><Ionicons name="pulse-outline" size={20} color={theme.colors.warning} /></IconBox>}
+            label="Testare senzori (raw)"
+            desc="Verifică fluxul brut înainte de salt"
+            right={<Chevron />}
+            onPress={() => router.push('/sensors')}
+            isLast
+          />
+        </SettingGroup>
 
         {/* ══ WiFi ══ */}
         <SectionLabel title="Rețea WiFi" />
@@ -713,7 +668,7 @@ export default function SettingsScreen() {
                   setSoftAp(value);
                   const ok = publishSpecCommand('wifi.softap.set', { enabled: value });
                   if (!ok) {
-                    showToast('MQTT indisponibil. Comanda Soft AP nu a fost trimisă.', 'SHORT');
+
                   }
                 }}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -749,7 +704,7 @@ export default function SettingsScreen() {
                     retry_ms: 5000
                   });
                   if (!ok) {
-                    showToast('MQTT indisponibil. Setarea nu a fost trimisă.', 'SHORT');
+   
                   }
                 }}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -773,7 +728,7 @@ export default function SettingsScreen() {
                 onValueChange={(value) => {
                   const ok = sendModuleCommand('temperature', value);
                   if (!ok) {
-                    showToast('MQTT indisponibil. Comanda NTC nu a fost trimisă.', 'SHORT');
+                
                   }
                 }}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -792,7 +747,7 @@ export default function SettingsScreen() {
                   setOledEnabled(value);
                   const ok = publishSpecCommand('display.oled.set', { enabled: value });
                   if (!ok) {
-                    showToast('MQTT indisponibil. Comanda OLED nu a fost trimisă.', 'SHORT');
+  
                   }
                 }}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -827,7 +782,7 @@ export default function SettingsScreen() {
                     idle_timeout_s: 60
                   });
                   if (!ok) {
-                    showToast('MQTT indisponibil. Comanda Deep Sleep nu a fost trimisă.', 'SHORT');
+                  
                   }
                 }}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -936,26 +891,13 @@ export default function SettingsScreen() {
           }
         />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'mqtt'} onClose={closeSheet}>
-        <MqttSheet
-          onClose={closeSheet}
-          onSave={({ host, port, user, pass }) =>
-            publishSpecCommand('mqtt.set_broker', {
-              host,
-              port,
-              username: user,
-              password: pass,
-              transport: 'tcp'
-            })
-          }
-        />
-      </BottomSheet>
+  
       <BottomSheet visible={sheet === 'firmware'} onClose={closeSheet}>
         <FirmwareSheet
           onClose={closeSheet}
           onCheckUpdates={() => {
             const ok = publishSpecCommand('firmware.check');
-            showToast(ok ? 'Cerere verificare firmware trimisă.' : 'MQTT indisponibil.', 'SHORT');
+        
           }}
         />
       </BottomSheet>
