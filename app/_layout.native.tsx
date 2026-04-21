@@ -6,6 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { TelemetryProvider } from '@/hooks/TelemetryContext';
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,12 +32,14 @@ export default function MobileRootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <TelemetryProvider>
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
         </Stack>
       </SafeAreaProvider>
+      </TelemetryProvider>
     </GestureHandlerRootView>
   );
 }

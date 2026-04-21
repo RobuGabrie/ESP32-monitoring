@@ -150,6 +150,14 @@ const isSameUuid = (left: unknown, right: unknown) => {
   return toCanonicalUuid(left) === toCanonicalUuid(right);
 };
 
+const advertisesServiceUuid = (deviceServiceUuids: string[] | undefined, expectedUuid: string) => {
+  if (!Array.isArray(deviceServiceUuids) || !deviceServiceUuids.length) {
+    return false;
+  }
+
+  return deviceServiceUuids.some((serviceUuid) => isSameUuid(serviceUuid, expectedUuid));
+};
+
 class MobileDataService {
   private bleManager: any | null = null;
   private connectedDevice: any | null = null;
@@ -550,10 +558,12 @@ class MobileDataService {
             const serviceData = device.serviceData as Record<string, string> | undefined;
             const manufacturerData = device.manufacturerData as string | undefined;
             const serviceUUIDsFromAdv = (device.serviceUUIDs as string[] | undefined) ?? undefined;
+            const matchesEsp32Service = advertisesServiceUuid(serviceUUIDsFromAdv, BLE_SERVICE_UUID);
 
             if (
               esp32Only &&
-              !this.looksLikeEsp32Device(name, device.localName, namePrefixes)
+              !this.looksLikeEsp32Device(name, device.localName, namePrefixes) &&
+              !matchesEsp32Service
             ) {
               return;
             }

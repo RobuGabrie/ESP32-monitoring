@@ -27,17 +27,17 @@ export default function StartScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#1C2230' }}>
       <ImageBackground
-        source={{ uri: 'https://images.unsplash.com/photo-1601024445121-e294d44d87e5?w=900&q=80' }}
+        source={require('../../assets/start.jpg')}
         resizeMode="cover"
         style={{ flex: 1 }}
         imageStyle={{ opacity: 0.65 }}
       >
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(28,34,48,0.32)' }} />
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 280, backgroundColor: 'rgba(28,34,48,0.94)' }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(28,34,48,0.52)' }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 280, backgroundColor: 'rgba(28,34,48,0.74)' }} />
 
         <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
           <View style={{ flex: 1, paddingHorizontal: 28, paddingBottom: 30 }}>
-            <View style={{ marginTop: 'auto', gap: 12 }}>
+            <View style={{marginTop: 'auto', gap: 12 }}>
               <Text
                 style={{
                   color: '#fff',

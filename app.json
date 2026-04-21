@@ -18,6 +18,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyCEwqn84JY4pVDjvZADZu2EjfKZJYz37xM"
+      },
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "This app connects to your ESP32 device on your local network for live telemetry and control.",
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to your wearable device for real-time health monitoring.",
@@ -32,6 +35,11 @@
         "backgroundColor": "#F1F3F5"
       },
       "package": "com.gabrielrobu.skydiver",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCEwqn84JY4pVDjvZADZu2EjfKZJYz37xM"
+        }
+      },
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",

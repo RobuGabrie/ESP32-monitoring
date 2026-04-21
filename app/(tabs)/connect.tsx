@@ -124,7 +124,7 @@ export default function ConnectScreen() {
     try {
       const success = await connect(deviceId);
       if (success) {
-        router.replace('/');
+        router.navigate('/');
       } else {
         Alert.alert('Conectare eșuată', 'Nu s-a putut stabili conexiunea.');
       }
@@ -160,7 +160,7 @@ export default function ConnectScreen() {
             <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();
-                else router.replace('/start');
+                else router.navigate('/start');
               }}
               style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}
             >

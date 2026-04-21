@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-
+import { useTelemetry } from '@/hooks/TelemetryContext';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useConnectivity } from '@/hooks/useConnectivity';
 
@@ -141,13 +141,13 @@ function PositionRow({ active }: { active: string }) {
           <View key={p.key} style={{
             flex: 1,
             backgroundColor: on ? `${p.accent}12` : '#fff',
-            borderRadius: 14,
+            borderRadius: 16,
             borderWidth: 1,
             borderColor: on ? `${p.accent}38` : '#E8E9EE',
             padding: 9, alignItems: 'center', gap: 5,
           }}>
             <View style={{
-              width: 28, height: 28, borderRadius: 9,
+              width: 22, height: 12, borderRadius: 9,
               backgroundColor: on ? `${p.accent}18` : '#F2F3F7',
               alignItems: 'center', justifyContent: 'center',
             }}>
@@ -300,6 +300,17 @@ export default function DashboardScreen() {
   } = useConnectivity();
   const router = useRouter();
 
+ const { startTrackingSession, stopTrackingSession, isTracking } = useTelemetry();
+
+  const handleStartTimer = async () => {
+    // Start your timer logic here
+    await startTrackingSession();
+  };
+
+  const handleStopTimer = async () => {
+    // Stop your timer logic here
+    await stopTrackingSession();
+  };
   const [nowMs, setNowMs]                     = useState(() => Date.now());
   const [jumpActionLoading, setJumpActionLoading] = useState(false);
   const [countdown, setCountdown]             = useState<number | null>(null);
@@ -451,7 +462,7 @@ export default function DashboardScreen() {
             shadowOffset: { width: 0, height: 8 }, elevation: 7,
           }}>
             <Image
-              source={require('../../reference/reference.jpg')}
+              source={require('../../assets/splash.png')}
               resizeMode="cover"
               style={{ width: '100%', height: '100%' }}
             />
@@ -507,8 +518,9 @@ export default function DashboardScreen() {
           {/* ── Nivel stres ── */}
           <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
             <View style={{
-              backgroundColor: '#fff', borderRadius: 16, padding: 13
-          
+              backgroundColor: '#fff', borderRadius: 16, padding: 13,
+              borderWidth: 1, borderColor: '#E8E9EE',
+              
             }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 9 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -522,9 +534,15 @@ export default function DashboardScreen() {
               <View style={{ height: 5, backgroundColor: '#EDEEF2', borderRadius: 3, overflow: 'hidden' }}>
                 <View style={{ width: `${stressPercent}%`, height: '100%', backgroundColor: stressColor, borderRadius: 3 }} />
               </View>
-              <Text style={{ fontSize: 10, fontWeight: '600', color: '#9DA3B4', marginTop: 6 }}>
-                Calculat din frecvența cardiacă · MAX30102
-              </Text>
+              
+         
+            </View>
+            <View>
+            <Text
+            style={{ fontSize: 11, fontWeight: '600', color: '#9DA3B4', marginTop: 6, paddingHorizontal:10 }}
+            >
+              Nivelul de stres estimativ trebuie sa fie sub 70% pentru a avea un salt în siguranță.
+            </Text>
             </View>
           </View>
 
@@ -545,7 +563,7 @@ export default function DashboardScreen() {
               onPress={handleStartStopJump}
               disabled={jumpActionLoading}
               style={({ pressed }) => ({
-                flex: 1, height: 52, borderRadius: 999,
+                flex: 1, height: 52, borderRadius: 16,
                 backgroundColor: diveSessionState.isActive ? '#FF5D7C' : '#2FCFB4',
                 alignItems: 'center', justifyContent: 'center',
                 opacity: pressed || jumpActionLoading ? 0.88 : 1,
@@ -558,15 +576,7 @@ export default function DashboardScreen() {
               </Text>
             </Pressable>
 
-            {/* Sincronizare web */}
-            <Pressable style={({ pressed }) => ({
-              width: 52, height: 52, borderRadius: 16,
-              backgroundColor: pressed ? '#D8F5F1' : '#fff',
-              alignItems: 'center', justifyContent: 'center',
-              shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
-            })}>
-              <Ionicons name="cloud-upload-outline" size={20} color="#2FCFB4" />
-            </Pressable>
+           
           </View>
           {/* ── Sensor Cards ── */}
           <View style={{ marginTop: 16 }}>
